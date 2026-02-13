@@ -18,4 +18,4 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("testsheet", test))
 
 print("Bot running...")
-app.run_polling()
+app.run_polling(drop_pending_updates=True)
