@@ -9,8 +9,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bot conectado correctamente ✅")
 
 async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    add_test_row()
-    await update.message.reply_text("Fila de prueba agregada a Google Sheets 📄")
+    create_draft(str(update.effective_user.id), "manual test")
+    await update.message.reply_text("Registro creado en la base de datos 📄")
 
 app = ApplicationBuilder().token(TOKEN).build()
 
