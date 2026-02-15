@@ -1,7 +1,7 @@
 import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from sheets_logger import add_test_row
+from sheets_logger import create_draft
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 
