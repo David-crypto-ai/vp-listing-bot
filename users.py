@@ -1,28 +1,57 @@
-from telegram import Update
-from telegram.ext import ContextTypes
-from sheets_logger import user_exists, add_pending_user
+import os
+import json
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 
-ADMIN_ID = 587441233  # <-- change to your telegram id
+SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
 
-async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
+USERS_TAB = "USERS"
 
-    if user_exists(user.id):
-        await update.message.reply_text("Welcome back ✅")
-        return
+USERS_SCHEMA = [
+    "TELEGRAM_ID",
+    "USERNAME",
+    "FULL_NAME",
+    "ROLE",
+    "STATUS",
+    "REGISTER_DATE"
+]
 
-    add_pending_user(user)
+def get_users_sheet():
+    creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
 
-    await update.message.reply_text("Your access request was sent to admin ⏳")
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
 
-    # notify admin
-    await context.bot.send_message(
-        ADMIN_ID,
-        f"""New user request:
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
 
-Name: {user.full_name}
-Username: @{user.username}
-ID: {user.id}
+    spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
-Approve inside Google Sheet → USERS tab"""
-    )
+    try:
+        sheet = spreadsheet.worksheet(USERS_TAB)
+    except:
+        sheet = spreadsheet.add_worksheet(title=USERS_TAB, rows="1000", cols="20")
+        sheet.append_row(USERS_SCHEMA)
+
+    return sheet
+
+
+def register_user(telegram_id, username, full_name):
+    sheet = get_users_sheet()
+    rows = sheet.get_all_values()
+
+    for row in rows:
+        if row and row[0] == telegram_id:
+            return  # already registered
+
+    sheet.append_row([
+        telegram_id,
+        username,
+        full_name,
+        "PENDING",
+        "WAIT_APPROVAL",
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ])
