@@ -1,27 +1,35 @@
 import os
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 
 from sheets_logger import create_draft
 from users import register_user
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 
-# ---------------- START BUTTON KEYBOARD ----------------
-start_keyboard = ReplyKeyboardMarkup(
-    [[KeyboardButton("▶ START")]],
-    resize_keyboard=True,
-    one_time_keyboard=True
-)
 
-# ---------------- FIRST MESSAGE (no commands shown) ----------------
+# =========================================================
+# FIRST CONTACT (shows START button only once)
+# =========================================================
 async def first_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [[KeyboardButton("▶ START")]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
     await update.message.reply_text(
         "Press START to open the system",
-        reply_markup=start_keyboard
+        reply_markup=reply_markup
     )
 
-# ---------------- WHEN USER PRESSES START ----------------
+
+# =========================================================
+# START BUTTON PRESSED
+# =========================================================
 async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text != "▶ START":
         return
@@ -40,21 +48,23 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Waiting for administrator approval."
     )
 
-# ---------------- TEST COMMAND ----------------
+
+# =========================================================
+# TEST SHEET
+# =========================================================
 async def testsheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     create_draft(str(update.effective_user.id), "manual test")
     await update.message.reply_text("Draft created 📄")
 
-# ---------------- APP ----------------
+
+# =========================================================
+# APP
+# =========================================================
 app = ApplicationBuilder().token(TOKEN).build()
 
-# Only /start exists — and only shows button
-app.add_handler(CommandHandler("start", first_contact))
-
-# Button press listener
+# Order matters!
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, start_button))
-
-# test command
+app.add_handler(CommandHandler("start", first_contact))
 app.add_handler(CommandHandler("testsheet", testsheet))
 
 print("Bot running...")
