@@ -18,6 +18,59 @@ BASE_SCHEMA = [
     "PHOTO_COUNT"
 ]
 
+# ---------------- USERS TABLE ----------------
+USERS_SCHEMA = [
+    "TELEGRAM_ID",
+    "USERNAME",
+    "FULL_NAME",
+    "ROLE",
+    "STATUS",
+    "REGISTER_DATE"
+]
+
+def get_users_sheet():
+    creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
+
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+
+    spreadsheet = client.open_by_key(SPREADSHEET_ID)
+
+    try:
+        sheet = spreadsheet.worksheet("USERS")
+    except:
+        sheet = spreadsheet.add_worksheet(title="USERS", rows="1000", cols="10")
+        sheet.append_row(USERS_SCHEMA)
+
+    return sheet
+
+
+def user_exists(user_id):
+    sheet = get_users_sheet()
+    data = sheet.get_all_values()
+    for row in data[1:]:
+        if row[0] == str(user_id) and row[4] == "ACTIVE":
+            return True
+    return False
+
+
+def add_pending_user(user):
+    sheet = get_users_sheet()
+
+    sheet.append_row([
+        str(user.id),
+        user.username or "",
+        user.full_name,
+        "NONE",
+        "PENDING",
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ])
+
 # ---------------- CONNECT ----------------
 def get_sheet():
     creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
