@@ -123,3 +123,14 @@ def menu_for_role(role: str) -> ReplyKeyboardMarkup:
         return admin_main_menu()
 
     return kb([[BTN_HELP]])
+
+# =========================================
+# OPEN MENU FOR ROLE (called from main.py)
+# =========================================
+async def open_menu_for_role(update, context, role: str):
+    keyboard = menu_for_role(role)
+
+    await update.message.reply_text(
+        f"Opened {role} menu",
+        reply_markup=keyboard
+    )
