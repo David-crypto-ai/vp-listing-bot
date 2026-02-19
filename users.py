@@ -147,3 +147,30 @@ async def notify_admin_new_user(context, telegram_id: str, username: str, full_n
             await context.bot.send_message(chat_id=admin_id, text=text, reply_markup=kb)
         except Exception:
             pass
+async def register_user(update, context):
+    user = update.effective_user
+    telegram_id = str(user.id)
+    username = user.username or ""
+    full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+
+    role, status = get_user_status_role(telegram_id)
+
+    # ---------------- ADMIN AUTO-BOOTSTRAP ----------------
+    if is_admin(telegram_id):
+        # ensure exists
+        register_user_pending(telegram_id, username, full_name)
+        set_user_active_role(telegram_id, "ADMIN", telegram_id)
+        return "ADMIN"
+
+    # ---------------- EXISTING USER ----------------
+    if role and status == "ACTIVE":
+        return role
+
+    # ---------------- NEW USER ----------------
+    if not role:
+        register_user_pending(telegram_id, username, full_name)
+        await notify_admin_new_user(context, telegram_id, username, full_name)
+        return "PENDING"
+
+    # ---------------- WAITING APPROVAL ----------------
+    return "PENDING"
