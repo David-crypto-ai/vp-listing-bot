@@ -80,6 +80,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
 
+    # --- FORCE ADMIN BOOTSTRAP FIRST ---
+    ensure_admin(str(user.id), user.username or "", user.full_name)
+
     # --- START BUTTON ---
     if text == "▶ START":
         await start_button(update, context)
