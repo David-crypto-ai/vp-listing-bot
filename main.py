@@ -1,4 +1,6 @@
 import os
+from telegram.ext import CallbackQueryHandler
+from users import assign_role
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     ApplicationBuilder,
@@ -53,17 +55,20 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=base_nav_keyboard()
         )
 
-        # open menu immediately
         role, status = get_user_status_role(str(user.id))
         await open_menu_for_role(update, context, role)
         return
 
     # --- NORMAL USERS ---
-    register_user_pending(
+    created = register_user_pending(
         telegram_id=str(user.id),
         username=user.username or "",
         full_name=user.full_name
     )
+
+    if created:
+        from users import notify_admin_new_user
+        await notify_admin_new_user(context, str(user.id), user.username or "", user.full_name)
 
     await update.message.reply_text(
         "Welcome 👋\n"
@@ -79,9 +84,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
     user = update.effective_user
-
-    # --- FORCE ADMIN BOOTSTRAP FIRST ---
-    ensure_admin(str(user.id), user.username or "", user.full_name)
 
     # --- START BUTTON ---
     if text == "▶ START":
@@ -142,12 +144,53 @@ async def testsheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     create_draft(str(update.effective_user.id), "manual test")
     await update.message.reply_text("Draft created 📄")
 
+async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    parts = data.split("|")
+
+    if len(parts) < 2:
+        return
+
+    action = parts[0]
+    target_id = parts[1]
+    admin_id = str(query.from_user.id)
+    from config import ADMIN_IDS
+
+    # 🚫 Only admins can approve users
+    if admin_id not in ADMIN_IDS:
+        await query.edit_message_text("⛔ You are not allowed to approve users.")
+        return
+
+    if action == "APPROVE":
+        role = parts[2]
+        assign_role(target_id, role, admin_id)
+
+        await query.edit_message_text(
+            f"✅ User {target_id} approved as {role}"
+        )
+
+        # 🔔 Notify the approved user
+        try:
+            await context.bot.send_message(
+                chat_id=target_id,
+                text="🎉 Your account has been approved!\nPress 🏠 MENU to begin."
+            )
+        except Exception:
+            pass
+
+    elif action == "REJECT":
+        await query.edit_message_text(
+            f"❌ User {target_id} rejected"
+        )
 
 # =========================================================
 # APP
 # =========================================================
 app = ApplicationBuilder().token(TOKEN).build()
-
+app.add_handler(CallbackQueryHandler(approval_callback))
 # Order matters!
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_message))
 app.add_handler(CommandHandler("start", first_contact))
