@@ -3,20 +3,21 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from config import SPREADSHEET_ID, GOOGLE_CREDENTIALS, WORKSHEET_USERS, ADMIN_IDS
+from config import SPREADSHEET_ID, GOOGLE_CREDENTIALS, ADMIN_IDS
 from utils import now_str, safe_text
 
-USERS_SCHEMA = [
-    "TELEGRAM_ID",
-    "USERNAME",
-    "FULL_NAME",
-    "ROLE",          # FINDER / SELLER / BOTH / GATEKEEPER / ADMIN
-    "STATUS",        # PENDING / ACTIVE / BLOCKED
-    "REGISTER_DATE",
-    "APPROVED_BY",
-    "APPROVED_AT"
-]
 
+# ================================
+# SHEET NAMES (NEW SYSTEM)
+# ================================
+TAB_USERS = "USERS"
+TAB_ROLES = "USER_ROLES"
+TAB_PERMS = "USER_PERMISSIONS"
+
+
+# ================================
+# GOOGLE CLIENT
+# ================================
 def _client():
     creds_dict = json.loads(GOOGLE_CREDENTIALS)
     scope = [
@@ -26,178 +27,166 @@ def _client():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     return gspread.authorize(creds)
 
-def _sheet():
+
+def _worksheet(name, headers):
     ss = _client().open_by_key(SPREADSHEET_ID)
     try:
-        sh = ss.worksheet(WORKSHEET_USERS)
+        sh = ss.worksheet(name)
     except Exception:
-        sh = ss.add_worksheet(title=WORKSHEET_USERS, rows="2000", cols="20")
-        sh.append_row(USERS_SCHEMA)
-    # Ensure header
-    header = sh.row_values(1)
-    if not header:
-        sh.append_row(USERS_SCHEMA)
+        sh = ss.add_worksheet(title=name, rows="2000", cols="20")
+        sh.append_row(headers)
+
+    if not sh.row_values(1):
+        sh.append_row(headers)
+
     return sh
 
-def get_user_row(telegram_id: str):
-    sh = _sheet()
+
+def users_sheet():
+    return _worksheet(TAB_USERS,
+        ["TELEGRAM_ID","USERNAME","FULL_NAME","STATUS","CREATED_AT","LAST_SEEN"]
+    )
+
+
+def roles_sheet():
+    return _worksheet(TAB_ROLES,
+        ["TELEGRAM_ID","ROLE","ASSIGNED_BY","ASSIGNED_AT"]
+    )
+
+
+def perms_sheet():
+    return _worksheet(TAB_PERMS,
+        ["TELEGRAM_ID","PERMISSION","GRANTED_BY","GRANTED_AT"]
+    )
+
+
+# ================================
+# USER LOOKUP
+# ================================
+def find_user(telegram_id):
+    sh = users_sheet()
     rows = sh.get_all_values()
+
     for i, r in enumerate(rows[1:], start=2):
         if r and r[0] == str(telegram_id):
             return i, r
     return None, None
 
-def register_user_pending(telegram_id: str, username: str, full_name: str):
+
+# ================================
+# REGISTER USER
+# ================================
+def register_user_pending(telegram_id, username, full_name):
     telegram_id = str(telegram_id)
     username = safe_text(username)
     full_name = safe_text(full_name)
 
-    sh = _sheet()
-    row_i, row = get_user_row(telegram_id)
+    sh = users_sheet()
+    row_i, _ = find_user(telegram_id)
+
     if row_i:
-        # already exists; keep as-is
         return
 
     sh.append_row([
         telegram_id,
         username,
         full_name,
-        "",            # ROLE empty until admin assigns
         "PENDING",
         now_str(),
-        "",
-        ""
+        now_str()
     ])
 
-def set_user_active_role(telegram_id: str, role: str, approved_by: str):
-    sh = _sheet()
-    row_i, row = get_user_row(str(telegram_id))
-    if not row_i:
-        return False
 
-    # columns are 1-based:
-    # ROLE=4, STATUS=5, APPROVED_BY=7, APPROVED_AT=8
-    sh.update_cell(row_i, 4, role)
-    sh.update_cell(row_i, 5, "ACTIVE")
-    sh.update_cell(row_i, 7, str(approved_by))
-    sh.update_cell(row_i, 8, now_str())
-    return True
+# ================================
+# ROLE MANAGEMENT
+# ================================
+def assign_role(telegram_id, role, admin_id):
+    sh = roles_sheet()
+    sh.append_row([telegram_id, role, admin_id, now_str()])
 
-def set_user_blocked(telegram_id: str, approved_by: str):
-    sh = _sheet()
-    row_i, row = get_user_row(str(telegram_id))
-    if not row_i:
-        return False
-    sh.update_cell(row_i, 5, "BLOCKED")
-    sh.update_cell(row_i, 7, str(approved_by))
-    sh.update_cell(row_i, 8, now_str())
-    return True
+    # activate user
+    u_sh = users_sheet()
+    row_i, _ = find_user(telegram_id)
+    if row_i:
+        u_sh.update_cell(row_i, 4, "ACTIVE")
 
-def get_user_status_role(telegram_id: str):
-    row_i, r = get_user_row(str(telegram_id))
+
+def get_user_roles(telegram_id):
+    sh = roles_sheet()
+    rows = sh.get_all_values()[1:]
+    return [r[1] for r in rows if r[0] == str(telegram_id)]
+
+
+# ================================
+# PERMISSIONS
+# ================================
+def grant_permission(telegram_id, perm, admin_id):
+    sh = perms_sheet()
+    sh.append_row([telegram_id, perm, admin_id, now_str()])
+
+
+def get_user_permissions(telegram_id):
+    sh = perms_sheet()
+    rows = sh.get_all_values()[1:]
+    return [r[1] for r in rows if r[0] == str(telegram_id)]
+
+
+# ================================
+# STATUS + ROLE (compatibility)
+# ================================
+def get_user_status_role(telegram_id):
+    row_i, r = find_user(telegram_id)
     if not r:
         return None, "PENDING"
-    role = (r[3] or "").strip()
-    status = (r[4] or "PENDING").strip()
-    return role, status
 
-def is_admin(telegram_id: str) -> bool:
-    return str(telegram_id) in ADMIN_IDS
+    status = r[3]
 
-def pending_users(limit=20):
-    sh = _sheet()
-    rows = sh.get_all_values()[1:]
-    out = []
-    for r in rows:
-        if len(r) >= 5 and (r[4] == "PENDING"):
-            out.append(r)
-    return out[:limit]
+    roles = get_user_roles(telegram_id)
 
-def approval_keyboard(target_user_id: str):
-    # Admin chooses role immediately after approval
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("Approve as FINDER", callback_data=f"APPROVE|{target_user_id}|FINDER"),
-            InlineKeyboardButton("Approve as SELLER", callback_data=f"APPROVE|{target_user_id}|SELLER"),
-        ],
-        [
-            InlineKeyboardButton("Approve as BOTH", callback_data=f"APPROVE|{target_user_id}|BOTH"),
-            InlineKeyboardButton("Approve as GATEKEEPER", callback_data=f"APPROVE|{target_user_id}|GATEKEEPER"),
-        ],
-        [
-            InlineKeyboardButton("Approve as ADMIN", callback_data=f"APPROVE|{target_user_id}|ADMIN"),
-            InlineKeyboardButton("Reject", callback_data=f"REJECT|{target_user_id}"),
-        ]
-    ])
+    if not roles:
+        return None, status
 
-async def notify_admin_new_user(context, telegram_id: str, username: str, full_name: str):
-    # Sends an approval request to ALL admins
-    if not ADMIN_IDS:
-        return
-    text = (
-        "🧑‍💼 New user request\n\n"
-        f"Name: {full_name}\n"
-        f"Username: @{username if username else '(none)'}\n"
-        f"ID: {telegram_id}\n\n"
-        "Choose approval role:"
-    )
-    kb = approval_keyboard(str(telegram_id))
-    for admin_id in ADMIN_IDS:
-        try:
-            await context.bot.send_message(chat_id=admin_id, text=text, reply_markup=kb)
-        except Exception:
-            pass
-async def register_user(update, context):
-    user = update.effective_user
-    telegram_id = str(user.id)
-    username = user.username or ""
-    full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    # temporary compatibility with old menu system
+    if "ADMIN" in roles:
+        return "ADMIN", status
+    if "GATEKEEPER" in roles:
+        return "GATEKEEPER", status
+    if "FINDER" in roles and "SELLER" in roles:
+        return "BOTH", status
+    if "FINDER" in roles:
+        return "FINDER", status
+    if "SELLER" in roles:
+        return "SELLER", status
 
-    role, status = get_user_status_role(telegram_id)
+    return None, status
 
-    # ---------------- ADMIN AUTO-BOOTSTRAP ----------------
-    if is_admin(telegram_id):
-        # ensure exists
-        register_user_pending(telegram_id, username, full_name)
-        set_user_active_role(telegram_id, "ADMIN", telegram_id)
-        return "ADMIN"
 
-    # ---------------- EXISTING USER ----------------
-    if role and status == "ACTIVE":
-        return role
-
-    # ---------------- NEW USER ----------------
-    if not role:
-        register_user_pending(telegram_id, username, full_name)
-        await notify_admin_new_user(context, telegram_id, username, full_name)
-        return "PENDING"
-
-    # ---------------- WAITING APPROVAL ----------------
-    return "PENDING"
-def ensure_admin(telegram_id: str, username: str, full_name: str):
+# ================================
+# ADMIN AUTO-BOOTSTRAP
+# ================================
+def ensure_admin(telegram_id, username, full_name):
     telegram_id = str(telegram_id)
-    sh = _sheet()
-    row_i, row = get_user_row(telegram_id)
 
     if telegram_id not in ADMIN_IDS:
         return False
 
-    if not row_i:
-        sh.append_row([
-            telegram_id,
-            username,
-            full_name,
-            "ADMIN",
-            "ACTIVE",
-            now_str(),
-            telegram_id,
-            now_str()
-        ])
-        return True
+    register_user_pending(telegram_id, username, full_name)
 
-    # if exists but pending → upgrade
-    sh.update_cell(row_i, 4, "ADMIN")
-    sh.update_cell(row_i, 5, "ACTIVE")
-    sh.update_cell(row_i, 7, telegram_id)
-    sh.update_cell(row_i, 8, now_str())
+    roles = get_user_roles(telegram_id)
+    if "ADMIN" not in roles:
+        assign_role(telegram_id, "ADMIN", telegram_id)
+
+    perms = [
+        "VIEW_ALL_PRICES",
+        "EDIT_OWNER_PRICE",
+        "EDIT_FINAL_PRICE",
+        "MANAGE_USERS",
+        "ASSIGN_ROLES"
+    ]
+
+    existing = get_user_permissions(telegram_id)
+    for p in perms:
+        if p not in existing:
+            grant_permission(telegram_id, p, telegram_id)
+
     return True
