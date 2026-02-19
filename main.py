@@ -164,12 +164,25 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("⛔ You are not allowed to approve users.")
         return
 
+    # ================= APPROVE =================
     if action == "APPROVE":
+        if len(parts) < 3:
+            await query.edit_message_text("❌ Invalid approval data")
+            return
+
         role = parts[2]
-        assign_role(target_id, role, admin_id)
+
+        # BOTH = FINDER + SELLER
+        if role == "BOTH":
+            assign_role(target_id, "FINDER", admin_id)
+            assign_role(target_id, "SELLER", admin_id)
+            role_text = "FINDER + SELLER"
+        else:
+            assign_role(target_id, role, admin_id)
+            role_text = role
 
         await query.edit_message_text(
-            f"✅ User {target_id} approved as {role}"
+            f"✅ User {target_id} approved as {role_text}"
         )
 
         # 🔔 Notify the approved user
@@ -181,6 +194,7 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
+    # ================= REJECT =================
     elif action == "REJECT":
         await query.edit_message_text(
             f"❌ User {target_id} rejected"

@@ -84,8 +84,9 @@ def register_user_pending(telegram_id, username, full_name):
     sh = users_sheet()
     row_i, _ = find_user(telegram_id)
 
+    # already exists
     if row_i:
-        return
+        return False
 
     sh.append_row([
         telegram_id,
@@ -96,6 +97,7 @@ def register_user_pending(telegram_id, username, full_name):
         now_str()
     ])
 
+    return True
 
 
 # ================================
@@ -207,3 +209,43 @@ def ensure_admin(telegram_id, username, full_name):
             grant_permission(telegram_id, p, telegram_id)
 
     return True
+
+# ================================
+# ADMIN NOTIFICATION (APPROVAL PANEL)
+# ================================
+async def notify_admin_new_user(context, telegram_id, username, full_name):
+
+    text = (
+        "👤 *New User Request*\n\n"
+        f"ID: `{telegram_id}`\n"
+        f"Username: @{username if username else 'none'}\n"
+        f"Name: {full_name}\n\n"
+        "Choose role:"
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton("Finder", callback_data=f"APPROVE|{telegram_id}|FINDER"),
+            InlineKeyboardButton("Seller", callback_data=f"APPROVE|{telegram_id}|SELLER"),
+        ],
+        [
+            InlineKeyboardButton("Both", callback_data=f"APPROVE|{telegram_id}|BOTH"),
+            InlineKeyboardButton("Gatekeeper", callback_data=f"APPROVE|{telegram_id}|GATEKEEPER"),
+        ],
+        [
+            InlineKeyboardButton("❌ Reject", callback_data=f"REJECT|{telegram_id}")
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    for admin_id in ADMIN_IDS:
+        try:
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=text,
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+        except Exception:
+            pass
