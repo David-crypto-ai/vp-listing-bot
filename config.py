@@ -10,7 +10,7 @@ TELEGRAM_TOKEN = _must("TELEGRAM_TOKEN")
 SPREADSHEET_ID = _must("SPREADSHEET_ID")
 GOOGLE_CREDENTIALS = _must("GOOGLE_CREDENTIALS")
 
-ADMIN_IDS = setADMIN_IDS = {"6310898007"}
+ADMIN_IDS = {"6310898007"}
 for part in os.environ.get("ADMIN_IDS", "").split(","):
     part = part.strip()
     if part.isdigit():
