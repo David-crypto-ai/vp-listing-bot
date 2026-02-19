@@ -1,5 +1,15 @@
 from telegram import ReplyKeyboardMarkup, KeyboardButton
 
+# ===== MAIN PANELS =====
+PANEL_ITEMS = "📦 ITEMS"
+PANEL_ACCOUNTS = "🏢 ACCOUNTS"
+PANEL_WORKFLOW = "🔄 WORKFLOW"
+PANEL_USERS = "👥 USERS"
+PANEL_TASKS = "📝 TASKS"
+PANEL_REPORTS = "📊 REPORTS PANEL"
+PANEL_SYSTEM = "⚙️ SYSTEM"
+PANEL_BACK = "🔙 BACK"
+
 BTN_START = "▶ START"
 
 # Shared buttons
@@ -20,18 +30,22 @@ BTN_GET_PRICE = "💰 GET PRICE"
 BTN_MARK_SOLD = "✅ MARK SOLD"
 BTN_MY_SALES = "🗂️ MY SALES"
 
-# Gatekeeper/Admin
+# Gatekeeper/Admin actions
 BTN_APPROVE_PUBLISH_NEXT = "✅ APPROVE & PUBLISH NEXT"
 BTN_REQUEST_CHANGES = "📝 REQUEST CHANGES"
 BTN_HIDE_ITEM = "🙈 HIDE ITEM"
 BTN_ASSIGN_SELLER = "🧑‍💼 ASSIGN SELLER"
 BTN_VIEW_PENDING = "🗂️ VIEW PENDING"
-BTN_REPORTS = "📊 REPORTS"
+BTN_REPORTS_ACTION = "📊 VIEW REPORTS"
 
 # Admin special
 BTN_APPROVE_NEW_WORKER = "👤 APPROVE NEW WORKER"
 BTN_ASSIGN_REMOVE_ROLES = "🧑‍💼 ASSIGN/REMOVE ROLES"
 
+
+# =============================
+# Keyboard helper
+# =============================
 def kb(rows):
     return ReplyKeyboardMarkup(
         [[KeyboardButton(x) for x in row] for row in rows],
@@ -41,10 +55,27 @@ def kb(rows):
 def start_keyboard():
     return kb([[BTN_START]])
 
+
+# =============================
+# ADMIN MAIN PANEL
+# =============================
+def admin_main_menu():
+    return kb([
+        [PANEL_ITEMS, PANEL_ACCOUNTS],
+        [PANEL_WORKFLOW, PANEL_USERS],
+        [PANEL_TASKS, PANEL_REPORTS],
+        [PANEL_SYSTEM],
+        [PANEL_BACK]
+    ])
+
+
+# =============================
+# ROLE MENUS
+# =============================
 def menu_for_role(role: str) -> ReplyKeyboardMarkup:
     role = (role or "").upper().strip()
 
-    # FINDER menu
+    # FINDER
     if role == "FINDER":
         return kb([
             [BTN_NEW_ITEM, BTN_ADD_OWNER],
@@ -54,7 +85,7 @@ def menu_for_role(role: str) -> ReplyKeyboardMarkup:
             [BTN_HELP],
         ])
 
-    # SELLER menu
+    # SELLER
     if role == "SELLER":
         return kb([
             [BTN_GET_PRICE, BTN_MARK_SOLD],
@@ -64,7 +95,7 @@ def menu_for_role(role: str) -> ReplyKeyboardMarkup:
             [BTN_HELP],
         ])
 
-    # BOTH menu
+    # BOTH
     if role in ("FINDER+SELLER", "BOTH"):
         return kb([
             [BTN_NEW_ITEM, BTN_ADD_OWNER],
@@ -75,29 +106,20 @@ def menu_for_role(role: str) -> ReplyKeyboardMarkup:
             [BTN_HELP],
         ])
 
-    # GATEKEEPER menu
+    # GATEKEEPER
     if role == "GATEKEEPER":
         return kb([
             [BTN_APPROVE_PUBLISH_NEXT],
             [BTN_REQUEST_CHANGES, BTN_EDIT_ITEM],
             [BTN_HIDE_ITEM, BTN_ASSIGN_SELLER],
-            [BTN_VIEW_PENDING, BTN_REPORTS],
+            [BTN_VIEW_PENDING, BTN_REPORTS_ACTION],
             [BTN_FOLLOW_UP],
             [BTN_NEW_TODO, BTN_COMPLETE_TASK],
             [BTN_HELP],
         ])
 
-    # ADMIN menu
+    # ADMIN (now opens control panel)
     if role == "ADMIN":
-        return kb([
-            [BTN_APPROVE_PUBLISH_NEXT],
-            [BTN_APPROVE_NEW_WORKER, BTN_ASSIGN_REMOVE_ROLES],
-            [BTN_ASSIGN_SELLER, BTN_EDIT_ITEM],
-            [BTN_HIDE_ITEM, BTN_REPORTS],
-            [BTN_FOLLOW_UP],
-            [BTN_NEW_TODO, BTN_COMPLETE_TASK],
-            [BTN_HELP],
-        ])
+        return admin_main_menu()
 
-    # Default: pending
     return kb([[BTN_HELP]])
