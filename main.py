@@ -9,7 +9,7 @@ from telegram.ext import (
 )
 
 from sheets_logger import create_draft
-from users import register_user
+from users import register_user_pending, ensure_admin
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 
@@ -36,7 +36,13 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
 
-    register_user(
+    # --- ADMIN AUTO UNLOCK ---
+    if ensure_admin(str(user.id), user.username or "", user.full_name):
+        await update.message.reply_text("🔓 Admin access granted")
+        return
+
+    # --- NORMAL USERS ---
+    register_user_pending(
         telegram_id=str(user.id),
         username=user.username or "",
         full_name=user.full_name
@@ -47,7 +53,6 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Your account has been registered in the system.\n"
         "Waiting for administrator approval."
     )
-
 
 # =========================================================
 # TEST SHEET

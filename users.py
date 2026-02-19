@@ -174,3 +174,30 @@ async def register_user(update, context):
 
     # ---------------- WAITING APPROVAL ----------------
     return "PENDING"
+def ensure_admin(telegram_id: str, username: str, full_name: str):
+    telegram_id = str(telegram_id)
+    sh = _sheet()
+    row_i, row = get_user_row(telegram_id)
+
+    if telegram_id not in ADMIN_IDS:
+        return False
+
+    if not row_i:
+        sh.append_row([
+            telegram_id,
+            username,
+            full_name,
+            "ADMIN",
+            "ACTIVE",
+            now_str(),
+            telegram_id,
+            now_str()
+        ])
+        return True
+
+    # if exists but pending → upgrade
+    sh.update_cell(row_i, 4, "ADMIN")
+    sh.update_cell(row_i, 5, "ACTIVE")
+    sh.update_cell(row_i, 7, telegram_id)
+    sh.update_cell(row_i, 8, now_str())
+    return True
