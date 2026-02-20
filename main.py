@@ -26,6 +26,8 @@ ACCOUNT_TYPE = 1
 ACCOUNT_OWNER_NAME = 2
 ACCOUNT_OWNER_PHONE = 3
 ACCOUNT_OWNER_CITY = 4
+ACCOUNT_CONFIRM = 5
+ACCOUNT_LOCATION = 6
 
 def base_nav_keyboard():
     return ReplyKeyboardMarkup(
@@ -89,7 +91,7 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================================
 async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    text = update.message.text
+    text = update.message.text if update.message.text else ""
     user = update.effective_user
 
     # --- START BUTTON ---
@@ -142,22 +144,89 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- OWNER CITY (END) ---
         if state == ACCOUNT_OWNER_CITY:
             context.user_data["account_draft"]["city"] = text
+            context.user_data["account_state"] = ACCOUNT_CONFIRM
 
             draft = context.user_data["account_draft"]
 
+            keyboard = ReplyKeyboardMarkup(
+                [
+                    [KeyboardButton("✅ CONFIRM")],
+                    [KeyboardButton("✏ EDIT")],
+                    [KeyboardButton("❌ CANCEL")]
+                ],
+                resize_keyboard=True
+            )
+
             await update.message.reply_text(
-                f"Account captured:\n"
+                f"Review account:\n"
                 f"Type: {draft['type']}\n"
                 f"Name: {draft['name']}\n"
                 f"Phone: {draft['phone']}\n"
-                f"City: {draft['city']}"
+                f"City: {draft['city']}",
+                reply_markup=keyboard
             )
-
-            context.user_data["account_state"] = ACCOUNT_NONE
-            context.user_data.pop("account_draft", None)
-
-            await open_menu_for_role(update, context, role)
             return
+
+        # --- CONFIRMATION STEP ---
+        if state == ACCOUNT_CONFIRM:
+
+            if text == "❌ CANCEL":
+                context.user_data["account_state"] = ACCOUNT_NONE
+                context.user_data.pop("account_draft", None)
+                await open_menu_for_role(update, context, role)
+                return
+
+            if text == "✏ EDIT":
+                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+                await update.message.reply_text("Enter owner name again:")
+                return
+
+            if text == "✅ CONFIRM":
+                context.user_data["account_state"] = ACCOUNT_LOCATION
+
+                keyboard = ReplyKeyboardMarkup(
+                    [[KeyboardButton("📍 SEND LOCATION", request_location=True)]],
+                    resize_keyboard=True,
+                    one_time_keyboard=True
+                )
+
+                await update.message.reply_text(
+                    "Send the yard location pin:",
+                    reply_markup=keyboard
+                )
+                return
+
+            return
+    
+        # ================= LOCATION CAPTURE =================
+        if state == ACCOUNT_LOCATION:
+
+            if update.message.location:
+                loc = update.message.location
+
+                context.user_data["account_draft"]["lat"] = loc.latitude
+                context.user_data["account_draft"]["lng"] = loc.longitude
+
+                draft = context.user_data["account_draft"]
+
+                await update.message.reply_text(
+                    f"Location saved:\n"
+                    f"{draft['name']} ({draft['city']})\n"
+                    f"Lat: {draft['lat']}\n"
+                    f"Lng: {draft['lng']}\n\n"
+                    f"(Not saved to database yet)",
+                    reply_markup=base_nav_keyboard()
+                )
+
+                context.user_data["account_state"] = ACCOUNT_NONE
+                context.user_data.pop("account_draft", None)
+
+                await open_menu_for_role(update, context, role)
+                return
+
+            else:
+                await update.message.reply_text("Please send the location using the button.")
+                return
 
     # ================= ADMIN PANEL NAVIGATION =================
     if role == "ADMIN":
@@ -284,6 +353,7 @@ app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CallbackQueryHandler(approval_callback))
 # Order matters!
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_message))
+app.add_handler(MessageHandler(filters.LOCATION, route_message))
 app.add_handler(CommandHandler("start", first_contact))
 app.add_handler(CommandHandler("testsheet", testsheet))
 
