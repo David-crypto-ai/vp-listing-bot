@@ -101,8 +101,7 @@ async def first_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # START BUTTON PRESSED
 # =========================================================
 async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text != "▶ START":
-        return
+    context.user_data["entered"] = True
 
     user = update.effective_user
 
@@ -120,11 +119,7 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["cached_role"] = "ADMIN"
         ADMIN_CACHE.add(str(user.id))
 
-        await update.message.reply_text(
-            "🔓 Admin access granted",
-            reply_markup=base_nav_keyboard()
-        )
-
+        context.user_data["entered"] = True
         await open_menu_for_role(update, context, "ADMIN")
         return
 
@@ -141,12 +136,20 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from users import notify_admin_new_user
         await notify_admin_new_user(context, str(user.id), user.username or "", user.full_name)
 
-    await update.message.reply_text(
-        "Welcome 👋\n"
-        "Your account has been registered in the system.\n"
-        "Waiting for administrator approval.",
-        reply_markup=base_nav_keyboard()
-    )
+    # check approval AFTER registration
+    role, status = await get_cached_role(context, str(user.id))
+
+    context.user_data["entered"] = True
+
+    if status != "ACTIVE":
+        await update.message.reply_text(
+            "Welcome 👋\n"
+            "Your account has been registered in the system.\n"
+            "Waiting for administrator approval."
+        )
+        return
+
+    await open_menu_for_role(update, context, role)
 
 # =========================================================
 # MAIN MESSAGE ROUTER
@@ -156,7 +159,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
+    # ===== HARD START GATE =====
+    entered = context.user_data.get("entered", False)
     text = update.message.text or ""
+
+    # allow START to unlock system
+    if not entered and "START" not in text.upper():
+        await first_contact(update, context)
+        return
+
     user = update.effective_user
 
     # session warm-start after approval
@@ -164,7 +175,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if forced:
         context.user_data["cached_role"] = forced[0]
     # --- START BUTTON ---
-    if text == "▶ START":
+    if "START" in text.upper():
         await start_button(update, context)
         return
 
@@ -498,11 +509,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text == PANEL_SYSTEM:
             await update.message.reply_text("⚙️ SYSTEM panel opened")
             return
-
-    # --- OPEN MENU ONLY WHEN USER ASKS ---
-    if text in ["🏠 MENU", "🔙 BACK", "OPEN MENU"]:
-        await open_menu_for_role(update, context, role)
-        return
 
 # =========================================================
 # TEST SHEET
