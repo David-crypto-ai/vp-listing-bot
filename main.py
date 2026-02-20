@@ -159,6 +159,10 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
     user = update.effective_user
 
+    # session warm-start after approval
+    forced = context.application.bot_data.get("force_role_cache", {}).pop(str(user.id), None)
+    if forced:
+        context.user_data["cached_role"] = forced[0]
     # --- START BUTTON ---
     if text == "▶ START":
         await start_button(update, context)
@@ -544,7 +548,8 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await run_sheet(context, assign_role, target_id, role, admin_id)
             role_text = role
 
-        ROLE_CACHE.pop(target_id, None)
+        # update cache immediately (prevents START loop)
+        ROLE_CACHE[target_id] = (role_text if role != "BOTH" else "FINDER", "ACTIVE")
 
         await query.edit_message_text(
             f"✅ User {target_id} approved as {role_text}"
@@ -556,6 +561,9 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=target_id,
                 text="🎉 Your account has been approved!\nPress 🏠 MENU to begin."
             )
+
+            # preload role so first MENU works instantly
+            context.application.bot_data.setdefault("force_role_cache", {})[target_id] = ROLE_CACHE[target_id]
         except Exception:
             pass
 
