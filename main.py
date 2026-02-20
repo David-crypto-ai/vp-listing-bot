@@ -114,10 +114,18 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- SELECT TYPE ---
         if state == ACCOUNT_TYPE:
 
-            if text == "👤 OWNER":
+            if "OWNER" in text:
                 context.user_data["account_state"] = ACCOUNT_OWNER_NAME
                 context.user_data["account_draft"] = {"type": "OWNER"}
                 await update.message.reply_text("Enter owner name:")
+                return
+                
+            if "ONLINE" in text:
+                await update.message.reply_text("Online accounts coming soon")
+                return
+
+            if "AUCTION" in text:
+                await update.message.reply_text("Auction accounts coming soon")
                 return
 
             if text == "🔙 BACK":
