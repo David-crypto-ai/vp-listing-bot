@@ -141,7 +141,10 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["entered"] = True
 
-    if status != "ACTIVE":
+    # treat empty sheet response as pending
+    if not status or status != "ACTIVE":
+        ROLE_CACHE[str(user.id)] = ("PENDING", "PENDING")
+
         await update.message.reply_text(
             "Welcome 👋\n"
             "Your account has been registered in the system.\n"
@@ -163,8 +166,11 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     entered = context.user_data.get("entered", False)
     text = update.message.text or ""
 
-    # allow START to unlock system
-    if not entered and "START" not in text.upper():
+    # check if user already approved in cache
+    cached = ROLE_CACHE.get(str(update.effective_user.id))
+
+    # allow approved users to bypass START gate
+    if not entered and not cached and "START" not in text.upper():
         await first_contact(update, context)
         return
 
@@ -557,6 +563,9 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # update cache immediately (prevents START loop)
         ROLE_CACHE[target_id] = (role_text if role != "BOTH" else "FINDER", "ACTIVE")
 
+        # force next message to reopen menu
+        context.application.bot_data.setdefault("force_role_cache", {})[target_id] = ROLE_CACHE[target_id]
+
         await query.edit_message_text(
             f"✅ User {target_id} approved as {role_text}"
         )
@@ -568,8 +577,6 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text="🎉 Your account has been approved!\nPress 🏠 MENU to begin."
             )
 
-            # preload role so first MENU works instantly
-            context.application.bot_data.setdefault("force_role_cache", {})[target_id] = ROLE_CACHE[target_id]
         except Exception:
             pass
 
@@ -588,7 +595,7 @@ app.add_handler(CallbackQueryHandler(approval_callback))
 
 # LOCATION MUST COME FIRST
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=0)
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_message), group=1)
+app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=1)
 
 app.add_handler(CommandHandler("start", first_contact))
 app.add_handler(CommandHandler("testsheet", testsheet))
