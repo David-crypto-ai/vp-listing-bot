@@ -115,13 +115,17 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ADMIN_CACHE.add(str(user.id))
 
     if is_admin:
+        # cache admin role immediately (no sheets re-check)
+        ROLE_CACHE[str(user.id)] = ("ADMIN", "ACTIVE")
+        context.user_data["cached_role"] = "ADMIN"
+        ADMIN_CACHE.add(str(user.id))
+
         await update.message.reply_text(
             "🔓 Admin access granted",
             reply_markup=base_nav_keyboard()
         )
 
-        role, status = await get_cached_role(context, str(user.id))
-        await open_menu_for_role(update, context, role)
+        await open_menu_for_role(update, context, "ADMIN")
         return
 
     # --- NORMAL USERS ---
@@ -167,6 +171,11 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # wizard active → use cached role, never query sheets
         role = context.user_data.get("cached_role")
         status = "ACTIVE"
+
+        # fallback only if cache missing (prevents "stuck")
+        if not role:
+            role, _status = await get_cached_role(context, str(user.id))
+            context.user_data["cached_role"] = role
     else:
         role, status = await get_cached_role(context, str(user.id))
         context.user_data["cached_role"] = role
