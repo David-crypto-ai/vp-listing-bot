@@ -7,7 +7,8 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    filters
+    filters,
+    PicklePersistence
 )
 
 from sheets_logger import create_draft
@@ -68,6 +69,12 @@ def confirm_keyboard():
         resize_keyboard=True
     )
 
+def clear_user_session(context):
+    context.user_data.clear()
+
+async def run_sheet(context, func, *args, **kwargs):
+    return await context.application.run_in_threadpool(func, *args, **kwargs)
+
 # =========================================================
 # FIRST CONTACT (shows START button only once)
 # =========================================================
@@ -101,7 +108,9 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # --- NORMAL USERS ---
-    created = register_user_pending(
+    created = await run_sheet(
+        context,
+        register_user_pending,
         telegram_id=str(user.id),
         username=user.username or "",
         full_name=user.full_name
@@ -123,7 +132,10 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================================
 async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    text = update.message.text if update.message.text else ""
+    if not update.message:
+        return
+
+    text = update.message.text or ""
     user = update.effective_user
 
     # --- START BUTTON ---
@@ -134,18 +146,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- CHECK ROLE ---
     role, status = get_user_status_role(str(user.id))
 
-    if status != "ACTIVE":
+    # ================= ACCOUNT WIZARD HANDLER =================
+    state = context.user_data.get("account_state", ACCOUNT_NONE)
 
-        # allow menu access while pending
-        if text in ["🏠 MENU", "OPEN MENU"]:
+    if state != ACCOUNT_NONE:
+        pass
+    else:
+        if status != "ACTIVE":
             await update.message.reply_text("⏳ Waiting for administrator approval.")
             return
-
-        await update.message.reply_text("⏳ Waiting for administrator approval.")
-        return
-
-       # ================= ACCOUNT WIZARD HANDLER =================
-    state = context.user_data.get("account_state", ACCOUNT_NONE)
 
     if state != ACCOUNT_NONE:
 
@@ -199,7 +208,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            context.user_data["account_draft"]["name"] = text
+            context.user_data.setdefault("account_draft", {})["name"] = text
             context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
             await update.message.reply_text(
                 "Enter phone number:",
@@ -252,8 +261,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if state == ACCOUNT_CONFIRM:
 
             if text == "❌ CANCEL":
-                context.user_data["account_state"] = ACCOUNT_NONE
-                context.user_data.pop("account_draft", None)
+                clear_user_session(context)
                 await open_menu_for_role(update, context, role)
                 return
 
@@ -349,7 +357,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             if state == ACCOUNT_EDIT_NAME:
-                context.user_data["account_draft"]["name"] = text
+                context.user_data.setdefault("account_draft", {})["name"] = text
 
             elif state == ACCOUNT_EDIT_PHONE:
                 context.user_data["account_draft"]["phone"] = text
@@ -383,22 +391,23 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 lock_user(context)
 
                 loc = update.message.location
-                context.user_data["account_draft"]["lat"] = loc.latitude
-                context.user_data["account_draft"]["lng"] = loc.longitude
+                draft = context.user_data.setdefault("account_draft", {})
+                draft["lat"] = loc.latitude
+                draft["lng"] = loc.longitude
 
-                draft = context.user_data["account_draft"]
+                context.application.create_task(
+                    run_sheet(context, create_draft, str(user.id), draft)
+                )
 
                 await update.message.reply_text(
                     f"Location saved:\n"
-                    f"{draft['name']} ({draft['city']})\n"
-                    f"Lat: {draft['lat']}\n"
-                    f"Lng: {draft['lng']}",
+                    f"{draft.get('name','')} ({draft.get('city','')})\n"
+                    f"Lat: {draft.get('lat','')}\n"
+                    f"Lng: {draft.get('lng','')}",
                     reply_markup=base_nav_keyboard()
                 )
 
-                context.user_data["account_state"] = ACCOUNT_NONE
-                context.user_data.pop("account_draft", None)
-
+                clear_user_session(context)
                 await open_menu_for_role(update, context, role)
                 return
 
@@ -465,7 +474,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # TEST SHEET
 # =========================================================
 async def testsheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    create_draft(str(update.effective_user.id), "manual test")
+    await run_sheet(context, create_draft, str(update.effective_user.id), "manual test")
     await update.message.reply_text("Draft created 📄")
 
 async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -498,11 +507,11 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # BOTH = FINDER + SELLER
         if role == "BOTH":
-            assign_role(target_id, "FINDER", admin_id)
-            assign_role(target_id, "SELLER", admin_id)
+            await run_sheet(context, assign_role, target_id, "FINDER", admin_id)
+            await run_sheet(context, assign_role, target_id, "SELLER", admin_id)
             role_text = "FINDER + SELLER"
         else:
-            assign_role(target_id, role, admin_id)
+            await run_sheet(context, assign_role, target_id, role, admin_id)
             role_text = role
 
         await query.edit_message_text(
@@ -527,13 +536,18 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================================
 # APP
 # =========================================================
-app = ApplicationBuilder().token(TOKEN).build()
+persistence = PicklePersistence(filepath="bot_session_cache.pkl")
+
+app = ApplicationBuilder() \
+    .token(TOKEN) \
+    .persistence(persistence) \
+    .build()
 
 app.add_handler(CallbackQueryHandler(approval_callback))
 
 # LOCATION MUST COME FIRST
-app.add_handler(MessageHandler(filters.LOCATION, route_message))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_message))
+app.add_handler(MessageHandler(filters.LOCATION, route_message), group=0)
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_message), group=1)
 
 app.add_handler(CommandHandler("start", first_contact))
 app.add_handler(CommandHandler("testsheet", testsheet))
