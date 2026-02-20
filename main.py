@@ -213,6 +213,23 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # --- OWNER NAME ---
         if state == ACCOUNT_OWNER_NAME:
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_TYPE
+                await update.message.reply_text(
+                    "Select account type:",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [
+                            [KeyboardButton("👤 OWNER")],
+                            [KeyboardButton("🌐 ONLINE")],
+                            [KeyboardButton("🏛️ AUCTION")],
+                            [KeyboardButton("🔙 BACK")]
+                        ],
+                        resize_keyboard=True
+                    )
+                )
+                return
+
             context.user_data["account_draft"]["name"] = text
             context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
             await update.message.reply_text("Enter phone number:")
@@ -220,6 +237,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # --- OWNER PHONE ---
         if state == ACCOUNT_OWNER_PHONE:
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+                await update.message.reply_text("Enter owner name:")
+                return
+
             context.user_data["account_draft"]["phone"] = text
             context.user_data["account_state"] = ACCOUNT_OWNER_CITY
             await update.message.reply_text("Enter city:")
@@ -227,6 +250,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # --- OWNER CITY (END) ---
         if state == ACCOUNT_OWNER_CITY:
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
+                await update.message.reply_text("Enter phone number:")
+                return
+
             context.user_data["account_draft"]["city"] = text
             context.user_data["account_state"] = ACCOUNT_CONFIRM
 
