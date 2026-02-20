@@ -58,13 +58,22 @@ def edit_menu_keyboard():
         resize_keyboard=True
     )
 
+def confirm_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("✅ CONFIRM")],
+            [KeyboardButton("✏ EDIT")],
+            [KeyboardButton("❌ CANCEL")]
+        ],
+        resize_keyboard=True
+    )
+
 # =========================================================
 # UI LOCK (FOCUS LOCK)
 # =========================================================
 GLOBAL_NAV_BUTTONS = {
     "🏠 MENU",
     "OPEN MENU",
-    PANEL_BACK,
     PANEL_ITEMS,
     PANEL_ACCOUNTS,
     PANEL_WORKFLOW,
@@ -150,6 +159,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     role, status = get_user_status_role(str(user.id))
 
     if status != "ACTIVE":
+
+        # allow menu access while pending
+        if text in ["🏠 MENU", "OPEN MENU"]:
+            await update.message.reply_text("⏳ Waiting for administrator approval.")
+            return
+
         await update.message.reply_text("⏳ Waiting for administrator approval.")
         return
 
@@ -213,22 +228,13 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             draft = context.user_data["account_draft"]
 
-            keyboard = ReplyKeyboardMarkup(
-                [
-                    [KeyboardButton("✅ CONFIRM")],
-                    [KeyboardButton("✏ EDIT")],
-                    [KeyboardButton("❌ CANCEL")]
-                ],
-                resize_keyboard=True
-            )
-
             await update.message.reply_text(
                 f"Review account:\n"
                 f"Type: {draft['type']}\n"
                 f"Name: {draft['name']}\n"
                 f"Phone: {draft['phone']}\n"
                 f"City: {draft['city']}",
-                reply_markup=keyboard
+                reply_markup=confirm_keyboard()
             )
             return
 
@@ -264,6 +270,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
+            await update.message.reply_text("Use the buttons below.")
             return
 
         # ================= EDIT SELECT =================
@@ -299,26 +306,19 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 draft = context.user_data["account_draft"]
 
-                keyboard = ReplyKeyboardMarkup(
-                    [
-                        [KeyboardButton("✅ CONFIRM")],
-                        [KeyboardButton("✏ EDIT")],
-                        [KeyboardButton("❌ CANCEL")]
-                    ],
-                    resize_keyboard=True
-                )
-
                 await update.message.reply_text(
                     f"Review account:\n"
                     f"Type: {draft['type']}\n"
                     f"Name: {draft['name']}\n"
                     f"Phone: {draft['phone']}\n"
                     f"City: {draft['city']}",
-                    reply_markup=keyboard
+                    reply_markup=confirm_keyboard()
                 )
                 return
 
-        state = context.user_data.get("account_state", ACCOUNT_NONE)
+            # ignore any other text while selecting edit field
+            await update.message.reply_text("Choose one of the buttons.")
+            return
 
         # ================= APPLY EDIT =================
         if state in [ACCOUNT_EDIT_NAME, ACCOUNT_EDIT_PHONE, ACCOUNT_EDIT_CITY]:
@@ -338,27 +338,25 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             draft = context.user_data["account_draft"]
 
-            keyboard = ReplyKeyboardMarkup(
-                [
-                    [KeyboardButton("✅ CONFIRM")],
-                    [KeyboardButton("✏ EDIT")],
-                    [KeyboardButton("❌ CANCEL")]
-                ],
-                resize_keyboard=True
-            )
-
             await update.message.reply_text(
                 f"Review account:\n"
                 f"Type: {draft['type']}\n"
                 f"Name: {draft['name']}\n"
                 f"Phone: {draft['phone']}\n"
                 f"City: {draft['city']}",
-                reply_markup=keyboard
+                reply_markup=confirm_keyboard()
             )
             return
 
         # ================= LOCATION CAPTURE =================
         if state == ACCOUNT_LOCATION:
+
+            # allow escape
+            if text in ["🏠 MENU", "🔙 BACK"]:
+                context.user_data["account_state"] = ACCOUNT_NONE
+                context.user_data.pop("account_draft", None)
+                await open_menu_for_role(update, context, role)
+                return
 
             if update.message.location:
                 lock_user(context)
@@ -413,7 +411,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await update.message.reply_text(
                 "Select account type:",
-                reply_markup=keyboard
+                reply_markup=keyboard,
             )
             return
 
