@@ -69,30 +69,6 @@ def confirm_keyboard():
     )
 
 # =========================================================
-# UI LOCK (FOCUS LOCK)
-# =========================================================
-GLOBAL_NAV_BUTTONS = {
-    "🏠 MENU",
-    "OPEN MENU",
-    PANEL_ITEMS,
-    PANEL_ACCOUNTS,
-    PANEL_WORKFLOW,
-    PANEL_USERS,
-    PANEL_TASKS,
-    PANEL_REPORTS,
-    PANEL_SYSTEM
-}
-
-def is_global_nav_press(text: str) -> bool:
-    return text in GLOBAL_NAV_BUTTONS
-
-async def block_nav_during_wizard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Do NOT replace keyboard — just show warning
-    await update.message.reply_text(
-        "🔒 Finish the current step first."
-    )
-
-# =========================================================
 # FIRST CONTACT (shows START button only once)
 # =========================================================
 async def first_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -168,120 +144,109 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⏳ Waiting for administrator approval.")
         return
 
-    # ================= ACCOUNT WIZARD HANDLER =================
-state = context.user_data.get("account_state", ACCOUNT_NONE)
+       # ================= ACCOUNT WIZARD HANDLER =================
+    state = context.user_data.get("account_state", ACCOUNT_NONE)
 
-# ✅ FOCUS LOCK: block all global navigation while inside wizard
-# This prevents "ITEMS / USERS / WORKFLOW / MENU" from hijacking wizard input.
-if state != ACCOUNT_NONE and state != ACCOUNT_BUSY:
-    if is_global_nav_press(text):
-        await block_nav_during_wizard(update, context)
-        return
+    if state != ACCOUNT_NONE:
 
-if state != ACCOUNT_NONE:
+        if state == ACCOUNT_BUSY:
+            return
 
-    if state == ACCOUNT_BUSY:
-        return
+        # --- SELECT TYPE ---
+        if state == ACCOUNT_TYPE:
 
-    # --- SELECT TYPE ---
-    if state == ACCOUNT_TYPE:
+            if text == "👤 OWNER":
+                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+                context.user_data["account_draft"] = {"type": "OWNER"}
 
-        if text == "👤 OWNER":
-            context.user_data["account_state"] = ACCOUNT_OWNER_NAME
-            context.user_data["account_draft"] = {"type": "OWNER"}
+                await update.message.reply_text(
+                    "Enter owner name:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
+                return
 
+            if "ONLINE" in text:
+                await update.message.reply_text("Online accounts coming soon")
+                return
+
+            if "AUCTION" in text:
+                await update.message.reply_text("Auction accounts coming soon")
+                return
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_NONE
+                await open_menu_for_role(update, context, role)
+                return
+
+            return
+
+        # --- OWNER NAME ---
+        if state == ACCOUNT_OWNER_NAME:
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_TYPE
+                await update.message.reply_text(
+                    "Select account type:",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [
+                            [KeyboardButton("👤 OWNER")],
+                            [KeyboardButton("🌐 ONLINE")],
+                            [KeyboardButton("🏛️ AUCTION")],
+                            [KeyboardButton("🔙 BACK")]
+                        ],
+                        resize_keyboard=True
+                    )
+                )
+                return
+
+            context.user_data["account_draft"]["name"] = text
+            context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
             await update.message.reply_text(
-                "Enter owner name:",
+                "Enter phone number:",
                 reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
             )
             return
 
-        if "ONLINE" in text:
-            await update.message.reply_text("Online accounts coming soon")
-            return
+        # --- OWNER PHONE ---
+        if state == ACCOUNT_OWNER_PHONE:
 
-        if "AUCTION" in text:
-            await update.message.reply_text("Auction accounts coming soon")
-            return
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+                await update.message.reply_text("Enter owner name:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True))
+                return
 
-        if text == "🔙 BACK":
-            context.user_data["account_state"] = ACCOUNT_NONE
-            await open_menu_for_role(update, context, role)
-            return
-
-        return
-
-    # --- OWNER NAME ---
-    if state == ACCOUNT_OWNER_NAME:
-
-        if text == "🔙 BACK":
-            context.user_data["account_state"] = ACCOUNT_TYPE
+            context.user_data["account_draft"]["phone"] = text
+            context.user_data["account_state"] = ACCOUNT_OWNER_CITY
             await update.message.reply_text(
-                "Select account type:",
-                reply_markup=ReplyKeyboardMarkup(
-                    [
-                        [KeyboardButton("👤 OWNER")],
-                        [KeyboardButton("🌐 ONLINE")],
-                        [KeyboardButton("🏛️ AUCTION")],
-                        [KeyboardButton("🔙 BACK")]
-                    ],
-                    resize_keyboard=True
-                )
+                "Enter city:",
+                reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
             )
             return
 
-        if text in ["👤 OWNER","🌐 ONLINE","🏛️ AUCTION"]:
-            await update.message.reply_text("Enter the owner's name.")
+        # --- OWNER CITY ---
+        if state == ACCOUNT_OWNER_CITY:
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
+                await update.message.reply_text("Enter phone number:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True))
+                return
+
+            context.user_data["account_draft"]["city"] = text
+            context.user_data["account_state"] = ACCOUNT_CONFIRM
+
+            draft = context.user_data["account_draft"]
+
+            await update.message.reply_text(
+                f"Review account:\n"
+                f"Type: {draft['type']}\n"
+                f"Name: {draft['name']}\n"
+                f"Phone: {draft['phone']}\n"
+                f"City: {draft['city']}",
+                reply_markup=confirm_keyboard()
+            )
             return
-
-        context.user_data["account_draft"]["name"] = text
-        context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
-        await update.message.reply_text("Enter phone number:")
-        return
-
-    # --- OWNER PHONE ---
-    if state == ACCOUNT_OWNER_PHONE:
-
-        if text == "🔙 BACK":
-            context.user_data["account_state"] = ACCOUNT_OWNER_NAME
-            await update.message.reply_text("Enter owner name:")
-            return
-
-        if text in ["👤 OWNER","🌐 ONLINE","🏛️ AUCTION"]:
-            await update.message.reply_text("Enter the phone number.")
-            return
-
-        context.user_data["account_draft"]["phone"] = text
-        context.user_data["account_state"] = ACCOUNT_OWNER_CITY
-        await update.message.reply_text("Enter city:")
-        return
-
-    # --- OWNER CITY (END) ---
-    if state == ACCOUNT_OWNER_CITY:
-
-        if text == "🔙 BACK":
-            context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
-            await update.message.reply_text("Enter phone number:")
-            return
-
-        if text in ["👤 OWNER","🌐 ONLINE","🏛️ AUCTION"]:
-            await update.message.reply_text("Enter the city.")
-            return
-
-        context.user_data["account_draft"]["city"] = text
-        context.user_data["account_state"] = ACCOUNT_CONFIRM
-
-        draft = context.user_data["account_draft"]
-
-        await update.message.reply_text(
-            f"Review account:\n"
-            f"Type: {draft['type']}\n"
-            f"Name: {draft['name']}\n"
-            f"Phone: {draft['phone']}\n"
-            f"City: {draft['city']}",
-            reply_markup=confirm_keyboard()
-        )
-        return
 
         # --- CONFIRMATION STEP ---
         if state == ACCOUNT_CONFIRM:
@@ -304,9 +269,9 @@ if state != ACCOUNT_NONE:
                 context.user_data["account_state"] = ACCOUNT_LOCATION
 
                 keyboard = ReplyKeyboardMarkup(
-                    [[KeyboardButton("📍 SEND LOCATION", request_location=True)]],
-                    resize_keyboard=True,
-                    one_time_keyboard=True
+                    [[KeyboardButton("📍 SEND LOCATION", request_location=True)],
+                     [KeyboardButton("🔙 BACK")]],
+                    resize_keyboard=True
                 )
 
                 await update.message.reply_text(
@@ -315,40 +280,48 @@ if state != ACCOUNT_NONE:
                 )
                 return
 
-            await update.message.reply_text("Use the buttons below.")
             return
+
 
         # ================= EDIT SELECT =================
         if state == ACCOUNT_EDIT_SELECT:
 
             if text == "Name":
                 context.user_data["account_state"] = ACCOUNT_EDIT_NAME
-                await update.message.reply_text("Enter new name:")
+                await update.message.reply_text(
+                    "Enter new name:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
                 return
 
             if text == "Phone":
                 context.user_data["account_state"] = ACCOUNT_EDIT_PHONE
-                await update.message.reply_text("Enter new phone:")
+                await update.message.reply_text(
+                    "Enter new phone:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
                 return
 
             if text == "City":
                 context.user_data["account_state"] = ACCOUNT_EDIT_CITY
-                await update.message.reply_text("Enter new city:")
+                await update.message.reply_text(
+                    "Enter new city:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
                 return
 
             if text == "Location":
                 context.user_data["account_state"] = ACCOUNT_LOCATION
                 keyboard = ReplyKeyboardMarkup(
-                    [[KeyboardButton("📍 SEND LOCATION", request_location=True)]],
-                    resize_keyboard=True,
-                    one_time_keyboard=True
+                    [[KeyboardButton("📍 SEND LOCATION", request_location=True)],
+                     [KeyboardButton("🔙 BACK")]],
+                    resize_keyboard=True
                 )
                 await update.message.reply_text("Send new location:", reply_markup=keyboard)
                 return
 
-            if "BACK" in text:
+            if text == "🔙 BACK":
                 context.user_data["account_state"] = ACCOUNT_CONFIRM
-
                 draft = context.user_data["account_draft"]
 
                 await update.message.reply_text(
@@ -361,14 +334,19 @@ if state != ACCOUNT_NONE:
                 )
                 return
 
-            # ignore any other text while selecting edit field
-            await update.message.reply_text("Choose one of the buttons.")
             return
+
 
         # ================= APPLY EDIT =================
         if state in [ACCOUNT_EDIT_NAME, ACCOUNT_EDIT_PHONE, ACCOUNT_EDIT_CITY]:
 
-            lock_user(context)
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_EDIT_SELECT
+                await update.message.reply_text(
+                    "Select field to edit:",
+                    reply_markup=edit_menu_keyboard()
+                )
+                return
 
             if state == ACCOUNT_EDIT_NAME:
                 context.user_data["account_draft"]["name"] = text
@@ -379,8 +357,7 @@ if state != ACCOUNT_NONE:
             elif state == ACCOUNT_EDIT_CITY:
                 context.user_data["account_draft"]["city"] = text
 
-            unlock_user(context, ACCOUNT_CONFIRM)
-
+            context.user_data["account_state"] = ACCOUNT_CONFIRM
             draft = context.user_data["account_draft"]
 
             await update.message.reply_text(
@@ -397,10 +374,9 @@ if state != ACCOUNT_NONE:
         if state == ACCOUNT_LOCATION:
 
             # allow escape
-            if text in ["🏠 MENU", "🔙 BACK"]:
-                context.user_data["account_state"] = ACCOUNT_NONE
-                context.user_data.pop("account_draft", None)
-                await open_menu_for_role(update, context, role)
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_CONFIRM
+                await update.message.reply_text("Back to review:", reply_markup=confirm_keyboard())
                 return
 
             if update.message.location:
