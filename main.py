@@ -28,10 +28,33 @@ ACCOUNT_OWNER_PHONE = 3
 ACCOUNT_OWNER_CITY = 4
 ACCOUNT_CONFIRM = 5
 ACCOUNT_LOCATION = 6
+ACCOUNT_EDIT_SELECT = 7
+ACCOUNT_EDIT_NAME = 8
+ACCOUNT_EDIT_PHONE = 9
+ACCOUNT_EDIT_CITY = 10
+ACCOUNT_BUSY = 99
 
 def base_nav_keyboard():
     return ReplyKeyboardMarkup(
         [[KeyboardButton("🏠 MENU")]],
+        resize_keyboard=True
+    )
+
+def lock_user(context):
+    context.user_data["account_state"] = ACCOUNT_BUSY
+
+def unlock_user(context, state):
+    context.user_data["account_state"] = state
+
+def edit_menu_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("Name")],
+            [KeyboardButton("Phone")],
+            [KeyboardButton("City")],
+            [KeyboardButton("Location")],
+            [KeyboardButton("🔙 BACK")]
+        ],
         resize_keyboard=True
     )
 
@@ -111,6 +134,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if state != ACCOUNT_NONE:
 
+        if state == ACCOUNT_BUSY:
+            return
+
         # --- SELECT TYPE ---
         if state == ACCOUNT_TYPE:
 
@@ -119,7 +145,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data["account_draft"] = {"type": "OWNER"}
                 await update.message.reply_text("Enter owner name:")
                 return
-                
+
             if "ONLINE" in text:
                 await update.message.reply_text("Online accounts coming soon")
                 return
@@ -185,8 +211,11 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             if text == "✏ EDIT":
-                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
-                await update.message.reply_text("Enter owner name again:")
+                context.user_data["account_state"] = ACCOUNT_EDIT_SELECT
+                await update.message.reply_text(
+                    "Select field to edit:",
+                    reply_markup=edit_menu_keyboard()
+                )
                 return
 
             if text == "✅ CONFIRM":
@@ -206,12 +235,104 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             return
     
+        # ================= EDIT SELECT =================
+        if state == ACCOUNT_EDIT_SELECT:
+
+            if text == "Name":
+                context.user_data["account_state"] = ACCOUNT_EDIT_NAME
+                await update.message.reply_text("Enter new name:")
+                return
+
+            if text == "Phone":
+                context.user_data["account_state"] = ACCOUNT_EDIT_PHONE
+                await update.message.reply_text("Enter new phone:")
+                return
+
+            if text == "City":
+                context.user_data["account_state"] = ACCOUNT_EDIT_CITY
+                await update.message.reply_text("Enter new city:")
+                return
+
+            if text == "Location":
+                context.user_data["account_state"] = ACCOUNT_LOCATION
+                keyboard = ReplyKeyboardMarkup(
+                    [[KeyboardButton("📍 SEND LOCATION", request_location=True)]],
+                    resize_keyboard=True,
+                    one_time_keyboard=True
+                )
+                await update.message.reply_text("Send new location:", reply_markup=keyboard)
+                return
+
+            if "BACK" in text:
+                context.user_data["account_state"] = ACCOUNT_CONFIRM
+
+                draft = context.user_data["account_draft"]
+
+                keyboard = ReplyKeyboardMarkup(
+                    [
+                        [KeyboardButton("✅ CONFIRM")],
+                        [KeyboardButton("✏ EDIT")],
+                        [KeyboardButton("❌ CANCEL")]
+                    ],
+                    resize_keyboard=True
+                )
+
+                await update.message.reply_text(
+                    f"Review account:\n"
+                    f"Type: {draft['type']}\n"
+                    f"Name: {draft['name']}\n"
+                    f"Phone: {draft['phone']}\n"
+                    f"City: {draft['city']}",
+                    reply_markup=keyboard
+                )
+                return
+                
+        state = context.user_data.get("account_state", ACCOUNT_NONE)
+
+        # ================= APPLY EDIT =================
+        if state in [ACCOUNT_EDIT_NAME, ACCOUNT_EDIT_PHONE, ACCOUNT_EDIT_CITY]:
+
+            lock_user(context)
+
+            if state == ACCOUNT_EDIT_NAME:
+                context.user_data["account_draft"]["name"] = text
+
+            elif state == ACCOUNT_EDIT_PHONE:
+                context.user_data["account_draft"]["phone"] = text
+
+            elif state == ACCOUNT_EDIT_CITY:
+                context.user_data["account_draft"]["city"] = text
+
+            unlock_user(context, ACCOUNT_CONFIRM)
+
+            draft = context.user_data["account_draft"]
+
+            keyboard = ReplyKeyboardMarkup(
+                [
+                    [KeyboardButton("✅ CONFIRM")],
+                    [KeyboardButton("✏ EDIT")],
+                    [KeyboardButton("❌ CANCEL")]
+                ],
+                resize_keyboard=True
+            )
+
+            await update.message.reply_text(
+                f"Review account:\n"
+                f"Type: {draft['type']}\n"
+                f"Name: {draft['name']}\n"
+                f"Phone: {draft['phone']}\n"
+                f"City: {draft['city']}",
+                reply_markup=keyboard
+            )
+            return
+
         # ================= LOCATION CAPTURE =================
         if state == ACCOUNT_LOCATION:
 
             if update.message.location:
-                loc = update.message.location
+                lock_user(context)
 
+                loc = update.message.location
                 context.user_data["account_draft"]["lat"] = loc.latitude
                 context.user_data["account_draft"]["lng"] = loc.longitude
 
@@ -221,8 +342,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Location saved:\n"
                     f"{draft['name']} ({draft['city']})\n"
                     f"Lat: {draft['lat']}\n"
-                    f"Lng: {draft['lng']}\n\n"
-                    f"(Not saved to database yet)",
+                    f"Lng: {draft['lng']}",
                     reply_markup=base_nav_keyboard()
                 )
 
@@ -358,10 +478,13 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # APP
 # =========================================================
 app = ApplicationBuilder().token(TOKEN).build()
+
 app.add_handler(CallbackQueryHandler(approval_callback))
-# Order matters!
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_message))
+
+# LOCATION MUST COME FIRST
 app.add_handler(MessageHandler(filters.LOCATION, route_message))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_message))
+
 app.add_handler(CommandHandler("start", first_contact))
 app.add_handler(CommandHandler("testsheet", testsheet))
 
