@@ -20,6 +20,13 @@ from menus import (
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 
+# ================= ACCOUNT CREATION SESSION =================
+ACCOUNT_NONE = 0
+ACCOUNT_TYPE = 1
+ACCOUNT_OWNER_NAME = 2
+ACCOUNT_OWNER_PHONE = 3
+ACCOUNT_OWNER_CITY = 4
+
 def base_nav_keyboard():
     return ReplyKeyboardMarkup(
         [[KeyboardButton("🏠 MENU")]],
@@ -97,6 +104,61 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⏳ Waiting for administrator approval.")
         return
 
+    # ================= ACCOUNT WIZARD HANDLER =================
+    state = context.user_data.get("account_state", ACCOUNT_NONE)
+
+    if state != ACCOUNT_NONE:
+
+        # --- SELECT TYPE ---
+        if state == ACCOUNT_TYPE:
+
+            if text == "👤 OWNER":
+                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+                context.user_data["account_draft"] = {"type": "OWNER"}
+                await update.message.reply_text("Enter owner name:")
+                return
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_NONE
+                await open_menu_for_role(update, context, role)
+                return
+
+            return
+
+        # --- OWNER NAME ---
+        if state == ACCOUNT_OWNER_NAME:
+            context.user_data["account_draft"]["name"] = text
+            context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
+            await update.message.reply_text("Enter phone number:")
+            return
+
+        # --- OWNER PHONE ---
+        if state == ACCOUNT_OWNER_PHONE:
+            context.user_data["account_draft"]["phone"] = text
+            context.user_data["account_state"] = ACCOUNT_OWNER_CITY
+            await update.message.reply_text("Enter city:")
+            return
+
+        # --- OWNER CITY (END) ---
+        if state == ACCOUNT_OWNER_CITY:
+            context.user_data["account_draft"]["city"] = text
+
+            draft = context.user_data["account_draft"]
+
+            await update.message.reply_text(
+                f"Account captured:\n"
+                f"Type: {draft['type']}\n"
+                f"Name: {draft['name']}\n"
+                f"Phone: {draft['phone']}\n"
+                f"City: {draft['city']}"
+            )
+
+            context.user_data["account_state"] = ACCOUNT_NONE
+            context.user_data.pop("account_draft", None)
+
+            await open_menu_for_role(update, context, role)
+            return
+
     # ================= ADMIN PANEL NAVIGATION =================
     if role == "ADMIN":
 
@@ -109,7 +171,22 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if text == PANEL_ACCOUNTS:
-            await update.message.reply_text("🏢 ACCOUNTS panel opened")
+            context.user_data["account_state"] = ACCOUNT_TYPE
+
+            keyboard = ReplyKeyboardMarkup(
+                [
+                    [KeyboardButton("👤 OWNER")],
+                    [KeyboardButton("🌐 ONLINE")],
+                    [KeyboardButton("🏛️ AUCTION")],
+                    [KeyboardButton("🔙 BACK")]
+                ],
+                resize_keyboard=True
+            )
+
+            await update.message.reply_text(
+                "Select account type:",
+                reply_markup=keyboard
+            )
             return
 
         if text == PANEL_WORKFLOW:
