@@ -7,8 +7,7 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     ContextTypes,
-    filters,
-    PicklePersistence
+    filters
 )
 
 from sheets_logger import create_draft
@@ -20,6 +19,17 @@ from menus import (
 )
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
+
+ROLE_CACHE = {}
+ADMIN_CACHE = set()
+
+async def get_cached_role(context, user_id):
+    if user_id in ROLE_CACHE:
+        return ROLE_CACHE[user_id]
+
+    role, status = await run_sheet(context, get_user_status_role, user_id)
+    ROLE_CACHE[user_id] = (role, status)
+    return role, status
 
 # ================= ACCOUNT CREATION SESSION =================
 ACCOUNT_NONE = 0
@@ -97,13 +107,20 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
     # --- ADMIN AUTO UNLOCK ---
-    if ensure_admin(str(user.id), user.username or "", user.full_name):
+    if str(user.id) in ADMIN_CACHE:
+        is_admin = True
+    else:
+        is_admin = await run_sheet(context, ensure_admin, str(user.id), user.username or "", user.full_name)
+        if is_admin:
+            ADMIN_CACHE.add(str(user.id))
+
+    if is_admin:
         await update.message.reply_text(
             "🔓 Admin access granted",
             reply_markup=base_nav_keyboard()
         )
 
-        role, status = get_user_status_role(str(user.id))
+        role, status = await get_cached_role(context, str(user.id))
         await open_menu_for_role(update, context, role)
         return
 
@@ -143,19 +160,23 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start_button(update, context)
         return
 
-    # --- CHECK ROLE ---
-    role, status = get_user_status_role(str(user.id))
-
     # ================= ACCOUNT WIZARD HANDLER =================
     state = context.user_data.get("account_state", ACCOUNT_NONE)
 
     if state != ACCOUNT_NONE:
-        pass
+        # wizard active → use cached role, never query sheets
+        role = context.user_data.get("cached_role")
+        status = "ACTIVE"
     else:
+        role, status = await get_cached_role(context, str(user.id))
+        context.user_data["cached_role"] = role
+
         if status != "ACTIVE":
             await update.message.reply_text("⏳ Waiting for administrator approval.")
             return
 
+
+    # ================= WIZARD STATES =================
     if state != ACCOUNT_NONE:
 
         if state == ACCOUNT_BUSY:
@@ -514,6 +535,8 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await run_sheet(context, assign_role, target_id, role, admin_id)
             role_text = role
 
+        ROLE_CACHE.pop(target_id, None)
+
         await query.edit_message_text(
             f"✅ User {target_id} approved as {role_text}"
         )
@@ -536,12 +559,7 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================================
 # APP
 # =========================================================
-persistence = PicklePersistence(filepath="bot_session_cache.pkl")
-
-app = ApplicationBuilder() \
-    .token(TOKEN) \
-    .persistence(persistence) \
-    .build()
+app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CallbackQueryHandler(approval_callback))
 
@@ -553,4 +571,8 @@ app.add_handler(CommandHandler("start", first_contact))
 app.add_handler(CommandHandler("testsheet", testsheet))
 
 print("Bot running...")
-app.run_polling(drop_pending_updates=True)
+app.run_polling(
+    drop_pending_updates=True,
+    poll_interval=0.1,
+    timeout=10,
+)
