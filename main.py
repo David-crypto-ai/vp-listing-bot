@@ -59,6 +59,31 @@ def edit_menu_keyboard():
     )
 
 # =========================================================
+# UI LOCK (FOCUS LOCK)
+# =========================================================
+GLOBAL_NAV_BUTTONS = {
+    "🏠 MENU",
+    "OPEN MENU",
+    PANEL_BACK,
+    PANEL_ITEMS,
+    PANEL_ACCOUNTS,
+    PANEL_WORKFLOW,
+    PANEL_USERS,
+    PANEL_TASKS,
+    PANEL_REPORTS,
+    PANEL_SYSTEM
+}
+
+def is_global_nav_press(text: str) -> bool:
+    return text in GLOBAL_NAV_BUTTONS
+
+async def block_nav_during_wizard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Do NOT replace keyboard — just show warning
+    await update.message.reply_text(
+        "🔒 Finish the current step first."
+    )
+
+# =========================================================
 # FIRST CONTACT (shows START button only once)
 # =========================================================
 async def first_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -69,7 +94,6 @@ async def first_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Press START to open the system",
         reply_markup=reply_markup
     )
-
 
 # =========================================================
 # START BUTTON PRESSED
@@ -131,6 +155,13 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ================= ACCOUNT WIZARD HANDLER =================
     state = context.user_data.get("account_state", ACCOUNT_NONE)
+
+    # ✅ FOCUS LOCK: block all global navigation while inside wizard
+    # This prevents "ITEMS / USERS / WORKFLOW / MENU" from hijacking wizard input.
+    if state != ACCOUNT_NONE and state != ACCOUNT_BUSY:
+        if is_global_nav_press(text):
+            await block_nav_during_wizard(update, context)
+            return
 
     if state != ACCOUNT_NONE:
 
@@ -234,7 +265,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             return
-    
+
         # ================= EDIT SELECT =================
         if state == ACCOUNT_EDIT_SELECT:
 
@@ -286,7 +317,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=keyboard
                 )
                 return
-                
+
         state = context.user_data.get("account_state", ACCOUNT_NONE)
 
         # ================= APPLY EDIT =================
