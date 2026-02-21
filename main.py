@@ -87,75 +87,61 @@ async def run_sheet(context, func, *args, **kwargs):
     return await context.application.run_in_threadpool(func, *args, **kwargs)
 
 # =========================================================
-# FIRST CONTACT (shows START button only once)
-# =========================================================
-async def first_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[KeyboardButton("▶ START")]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-    await update.message.reply_text(
-        "Press START to open the system",
-        reply_markup=reply_markup
-    )
-
-# =========================================================
 # START BUTTON PRESSED
 # =========================================================
 async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     user = update.effective_user
+    uid = str(user.id)
 
-    SEEN_USERS.add(str(user.id))
-    context.user_data["entered"] = True
-    context.user_data["from_start_command"] = True
-
-    # --- ADMIN AUTO UNLOCK ---
-    if str(user.id) in ADMIN_CACHE:
-        is_admin = True
-    else:
-        is_admin = await run_sheet(context, ensure_admin, str(user.id), user.username or "", user.full_name)
-        if is_admin:
-            ADMIN_CACHE.add(str(user.id))
-
-    if is_admin:
-        # cache admin role immediately (no sheets re-check)
-        ROLE_CACHE[str(user.id)] = ("ADMIN", "ACTIVE")
+    # ---------- ADMIN ----------
+    if uid in ADMIN_CACHE:
+        ROLE_CACHE[uid] = ("ADMIN", "ACTIVE")
         context.user_data["cached_role"] = "ADMIN"
-        ADMIN_CACHE.add(str(user.id))
-
-        context.user_data["entered"] = True
         await open_menu_for_role(update, context, "ADMIN")
         return
 
-    # --- NORMAL USERS ---
-    created = await run_sheet(
+    is_admin = await run_sheet(context, ensure_admin, uid, user.username or "", user.full_name)
+    if is_admin:
+        ADMIN_CACHE.add(uid)
+        ROLE_CACHE[uid] = ("ADMIN", "ACTIVE")
+        context.user_data["cached_role"] = "ADMIN"
+        await open_menu_for_role(update, context, "ADMIN")
+        return
+
+    # ---------- CHECK USER STATUS ----------
+    role, status = await get_cached_role(context, uid)
+
+    # ACTIVE USER → MENU
+    if status == "ACTIVE":
+        context.user_data["cached_role"] = role
+        await open_menu_for_role(update, context, role)
+        return
+
+    # PENDING USER
+    if role == "PENDING":
+        await update.message.reply_text("⏳ Waiting for administrator approval.")
+        return
+
+    # ---------- BRAND NEW USER ----------
+    await run_sheet(
         context,
         register_user_pending,
-        telegram_id=str(user.id),
+        telegram_id=uid,
         username=user.username or "",
         full_name=user.full_name
     )
 
-    if created:
-        from users import notify_admin_new_user
-        await notify_admin_new_user(context, str(user.id), user.username or "", user.full_name)
+    from users import notify_admin_new_user
+    await notify_admin_new_user(context, uid, user.username or "", user.full_name)
 
-    # check approval AFTER registration
-    role, status = await get_cached_role(context, str(user.id))
+    ROLE_CACHE[uid] = ("REGISTERING", "REGISTERING")
 
-    context.user_data["entered"] = True
+    # Start your wizard immediately (no extra START button)
+    context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+    context.user_data["account_draft"] = {"type": "WORKER"}
 
-    # treat empty sheet response as pending
-    if not status or status != "ACTIVE":
-        ROLE_CACHE[str(user.id)] = ("PENDING", "PENDING")
-
-        await update.message.reply_text(
-            "Welcome 👋\n"
-            "Your account has been registered in the system.\n"
-            "Waiting for administrator approval."
-        )
-        return
-
-    await open_menu_for_role(update, context, role)
+    await update.message.reply_text("Welcome 👋\nEnter your full name:")
 
 async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -177,11 +163,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # allow known approved users even if cache restarted
     role, status = await get_cached_role(context, uid)
+    # Auto reopen menu for approved users
+if status == "ACTIVE" and context.user_data.get("account_state", ACCOUNT_NONE) == ACCOUNT_NONE:
+    context.user_data["cached_role"] = role
 
-    if not role or status != "ACTIVE":
-        if uid not in ADMIN_CACHE:
-            await first_contact(update, context)
-            return
+    # Only auto-open menu once per session
+    if not context.user_data.get("menu_loaded"):
+        context.user_data["menu_loaded"] = True
+        await open_menu_for_role(update, context, role)
+        return
 
     # ================= ACCOUNT WIZARD HANDLER =================
     state = context.user_data.get("account_state", ACCOUNT_NONE)
@@ -571,7 +561,7 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(
                 chat_id=target_id,
-                text="🎉 Your account has been approved!\nPress ▶ START to enter the system."
+                text="🎉 Your account has been approved!\nSend any message to open your workspace."
             )
 
         except Exception:
@@ -593,7 +583,6 @@ app.add_handler(CallbackQueryHandler(approval_callback))
 # LOCATION MUST COME FIRST
 # START must always work first
 app.add_handler(CommandHandler("start", start_button), group=0)
-app.add_handler(MessageHandler(filters.Regex(r'^(▶\s*START|START)$'), start_button), group=0)
 
 # Then normal routing
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
