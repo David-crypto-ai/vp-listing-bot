@@ -163,14 +163,22 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ===== HARD START GATE =====
-    entered = context.user_data.get("entered", False)
-    text = update.message.text or ""
+    text = (update.message.text or "").strip()
 
-    # check if user already approved in cache
+    # Telegram desktop sometimes sends empty text for keyboard presses
+    if not text and update.message.caption:
+        text = update.message.caption.strip()
+
+    # --- START BUTTON ALWAYS FIRST ---
+    if text.upper().endswith("START"):
+        await start_button(update, context)
+        return
+
+    entered = context.user_data.get("entered", False)
     cached = ROLE_CACHE.get(str(update.effective_user.id))
 
-    # allow approved users to bypass START gate
-    if not entered and not cached and "START" not in text.upper():
+    # HARD GATE (only blocks non-start messages)
+    if not entered and not cached:
         await first_contact(update, context)
         return
 
@@ -180,10 +188,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     forced = context.application.bot_data.get("force_role_cache", {}).pop(str(user.id), None)
     if forced:
         context.user_data["cached_role"] = forced[0]
-    # --- START BUTTON ---
-    if "START" in text.upper():
-        await start_button(update, context)
-        return
 
     # ================= ACCOUNT WIZARD HANDLER =================
     state = context.user_data.get("account_state", ACCOUNT_NONE)
@@ -597,7 +601,7 @@ app.add_handler(CallbackQueryHandler(approval_callback))
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=0)
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=1)
 
-app.add_handler(CommandHandler("start", first_contact))
+app.add_handler(CommandHandler("start", start_button))
 app.add_handler(CommandHandler("testsheet", testsheet))
 
 print("Bot running...")
