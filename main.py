@@ -87,8 +87,11 @@ def confirm_keyboard():
 def clear_user_session(context):
     context.user_data.clear()
 
+import asyncio
+
 async def run_sheet(context, func, *args, **kwargs):
-    return await context.application.run_in_threadpool(func, *args, **kwargs)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 # =========================================================
 # START BUTTON PRESSED
@@ -614,6 +617,11 @@ app.add_handler(CommandHandler("start", start_button), group=0)
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
 app.add_handler(CommandHandler("testsheet", testsheet))
+
+async def error_handler(update, context):
+    print("ERROR OCCURRED:", context.error)
+
+app.add_error_handler(error_handler)
 
 print("Bot running...")
 app.run_polling(
