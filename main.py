@@ -102,6 +102,7 @@ async def first_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================================
 async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["entered"] = True
+    context.user_data["from_start_command"] = True
 
     user = update.effective_user
 
@@ -170,15 +171,16 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = update.message.caption.strip()
 
     # --- START BUTTON ALWAYS FIRST ---
-    if text.upper().endswith("START"):
+    if text.strip().upper() in ["START", "▶ START", "/START"]:
         await start_button(update, context)
         return
 
     entered = context.user_data.get("entered", False)
+    from_start = context.user_data.pop("from_start_command", False)
     cached = ROLE_CACHE.get(str(update.effective_user.id))
 
-    # HARD GATE (only blocks non-start messages)
-    if not entered and not cached:
+    # HARD GATE (allow /start to pass)
+    if not entered and not cached and not from_start:
         await first_contact(update, context)
         return
 
