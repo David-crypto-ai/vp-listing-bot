@@ -163,15 +163,16 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # allow known approved users even if cache restarted
     role, status = await get_cached_role(context, uid)
-    # Auto reopen menu for approved users
-if status == "ACTIVE" and context.user_data.get("account_state", ACCOUNT_NONE) == ACCOUNT_NONE:
-    context.user_data["cached_role"] = role
 
-    # Only auto-open menu once per session
-    if not context.user_data.get("menu_loaded"):
-        context.user_data["menu_loaded"] = True
-        await open_menu_for_role(update, context, role)
-        return
+    # Auto reopen menu for approved users
+    if status == "ACTIVE" and context.user_data.get("account_state", ACCOUNT_NONE) == ACCOUNT_NONE:
+        context.user_data["cached_role"] = role
+
+        # Only auto-open menu once per session
+        if not context.user_data.get("menu_loaded"):
+            context.user_data["menu_loaded"] = True
+            await open_menu_for_role(update, context, role)
+            return
 
     # ================= ACCOUNT WIZARD HANDLER =================
     state = context.user_data.get("account_state", ACCOUNT_NONE)
