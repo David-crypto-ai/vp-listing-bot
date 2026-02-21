@@ -603,7 +603,7 @@ app.add_handler(CallbackQueryHandler(approval_callback))
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=0)
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=1)
 
-app.add_handler(CommandHandler("start", start_button))
+app.add_handler(CommandHandler("start", route_message))
 app.add_handler(CommandHandler("testsheet", testsheet))
 
 print("Bot running...")
