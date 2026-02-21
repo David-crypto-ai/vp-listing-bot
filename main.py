@@ -22,6 +22,7 @@ TOKEN = os.environ["TELEGRAM_TOKEN"]
 
 ROLE_CACHE = {}
 ADMIN_CACHE = set()
+SEEN_USERS = set()
 
 async def get_cached_role(context, user_id):
     if user_id in ROLE_CACHE:
@@ -101,10 +102,11 @@ async def first_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # START BUTTON PRESSED
 # =========================================================
 async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+
+    SEEN_USERS.add(str(user.id))
     context.user_data["entered"] = True
     context.user_data["from_start_command"] = True
-
-    user = update.effective_user
 
     # --- ADMIN AUTO UNLOCK ---
     if str(user.id) in ADMIN_CACHE:
@@ -175,12 +177,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start_button(update, context)
         return
 
-    entered = context.user_data.get("entered", False)
-    from_start = context.user_data.pop("from_start_command", False)
-    cached = ROLE_CACHE.get(str(update.effective_user.id))
+    uid = str(update.effective_user.id)
 
-    # HARD GATE (allow /start to pass)
-    if not entered and not cached and not from_start:
+    if uid not in SEEN_USERS and uid not in ROLE_CACHE:
         await first_contact(update, context)
         return
 
@@ -603,7 +602,7 @@ app.add_handler(CallbackQueryHandler(approval_callback))
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=0)
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=1)
 
-app.add_handler(CommandHandler("start", route_message))
+app.add_handler(CommandHandler("start", start_button))
 app.add_handler(CommandHandler("testsheet", testsheet))
 
 print("Bot running...")
