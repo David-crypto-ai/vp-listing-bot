@@ -18,6 +18,10 @@ from menus import (
     PANEL_TASKS, PANEL_REPORTS, PANEL_SYSTEM, PANEL_BACK
 )
 
+async def debug_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("\n=========== UPDATE RECEIVED ===========")
+    print(update)
+
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 
 ROLE_CACHE = {}
@@ -597,6 +601,8 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # APP
 # =========================================================
 app = ApplicationBuilder().token(TOKEN).build()
+
+app.add_handler(MessageHandler(filters.ALL, debug_all), group=-1)
 
 app.add_handler(CallbackQueryHandler(approval_callback))
 
