@@ -93,6 +93,8 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     user = update.effective_user
     uid = str(user.id)
+    context.user_data["entered"] = True
+    context.user_data["menu_loaded"] = False
 
     # ---------- ADMIN ----------
     if uid in ADMIN_CACHE:
@@ -164,6 +166,11 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # allow known approved users even if cache restarted
     role, status = await get_cached_role(context, uid)
 
+    # If user is not ACTIVE and never pressed START yet, show START button once
+    if status != "ACTIVE" and not context.user_data.get("entered"):
+        await first_contact(update, context)
+        return
+        
     # Auto reopen menu for approved users
     if status == "ACTIVE" and context.user_data.get("account_state", ACCOUNT_NONE) == ACCOUNT_NONE:
         context.user_data["cached_role"] = role
