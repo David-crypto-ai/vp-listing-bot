@@ -157,52 +157,31 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await open_menu_for_role(update, context, role)
 
-# =========================================================
-# MAIN MESSAGE ROUTER
-# =========================================================
 async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not update.message:
         return
 
-    # ===== HARD START GATE =====
+    # capture message text safely (buttons, captions, etc)
     text = (update.message.text or "").strip()
-
-    # Telegram desktop sometimes sends empty text for keyboard presses
     if not text and update.message.caption:
         text = update.message.caption.strip()
 
-    # --- START BUTTON ALWAYS FIRST ---
-async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    if not update.message:
-        return
-
-    is_start = False
-
-    if update.message.text:
-        if update.message.text.lower().startswith("/start"):
-            is_start = True
-        elif update.message.text.strip().upper() in ["START", "▶ START"]:
-            is_start = True
-
-    if is_start:
-        await start_button(update, context)
-        return
-
     uid = str(update.effective_user.id)
-
-    if uid not in SEEN_USERS and uid not in ROLE_CACHE:
-        if update.message.text and not update.message.text.startswith("/start"):
-            await first_contact(update, context)
-        return
-
     user = update.effective_user
 
-    # session warm-start after approval
+    # session warm-start after approval (VERY IMPORTANT FIRST)
     forced = context.application.bot_data.get("force_role_cache", {}).pop(str(user.id), None)
     if forced:
-        context.user_data["cached_role"] = forced[0]
+        ROLE_CACHE[str(user.id)] = forced
+
+    # allow known approved users even if cache restarted
+    role, status = await get_cached_role(context, uid)
+
+    if not role or status != "ACTIVE":
+        if uid not in ADMIN_CACHE:
+            await first_contact(update, context)
+            return
 
     # ================= ACCOUNT WIZARD HANDLER =================
     state = context.user_data.get("account_state", ACCOUNT_NONE)
@@ -217,7 +196,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             role, _status = await get_cached_role(context, str(user.id))
             context.user_data["cached_role"] = role
     else:
-        role, status = await get_cached_role(context, str(user.id))
         context.user_data["cached_role"] = role
 
         if status != "ACTIVE":
@@ -593,7 +571,7 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(
                 chat_id=target_id,
-                text="🎉 Your account has been approved!\nPress 🏠 MENU to begin."
+                text="🎉 Your account has been approved!\nPress ▶ START to enter the system."
             )
 
         except Exception:
@@ -613,10 +591,13 @@ app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CallbackQueryHandler(approval_callback))
 
 # LOCATION MUST COME FIRST
-app.add_handler(MessageHandler(filters.LOCATION, route_message), group=0)
-app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=1)
+# START must always work first
+app.add_handler(CommandHandler("start", start_button), group=0)
+app.add_handler(MessageHandler(filters.Regex(r'^(▶\s*START|START)$'), start_button), group=0)
 
-app.add_handler(CommandHandler("start", route_message))
+# Then normal routing
+app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
+app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
 app.add_handler(CommandHandler("testsheet", testsheet))
 
 print("Bot running...")
