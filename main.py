@@ -139,11 +139,17 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     ROLE_CACHE[uid] = ("REGISTERING", "REGISTERING")
 
-    # Start your wizard immediately (no extra START button)
+    # Always rebuild wizard fresh
+    clear_user_session(context)
     context.user_data["account_state"] = ACCOUNT_OWNER_NAME
     context.user_data["account_draft"] = {"type": "WORKER"}
+    context.user_data["cached_role"] = "REGISTERING"
 
-    await update.message.reply_text("Welcome 👋\nEnter your full name:")
+    await update.message.reply_text(
+        "Welcome 👋\nEnter your full name:",
+        reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 CANCEL")]], resize_keyboard=True)
+    )
+    return
 
 async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -166,21 +172,27 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # allow known approved users even if cache restarted
     role, status = await get_cached_role(context, uid)
 
-    # If user is not ACTIVE and never pressed START yet, show START button once
-    if status != "ACTIVE" and not context.user_data.get("entered"):
-        await first_contact(update, context)
-        return
-        
-    # Auto reopen menu for approved users
-    if status == "ACTIVE" and context.user_data.get("account_state", ACCOUNT_NONE) == ACCOUNT_NONE:
+    # ===== AUTO SESSION RECOVERY (CRITICAL) =====
+    state = context.user_data.get("account_state", ACCOUNT_NONE)
+
+    # ACTIVE USERS → always reopen menu if no wizard active
+    if status == "ACTIVE" and state == ACCOUNT_NONE:
         context.user_data["cached_role"] = role
+        await open_menu_for_role(update, context, role)
+        return
 
-        # Only auto-open menu once per session
-        if not context.user_data.get("menu_loaded"):
-            context.user_data["menu_loaded"] = True
-            await open_menu_for_role(update, context, role)
-            return
+    # PENDING USERS → always inform
+    if status == "PENDING":
+        await update.message.reply_text("⏳ Waiting for administrator approval.")
+        return
 
+    # REGISTERING USERS (cache lost after restart)
+    if status not in ["ACTIVE", "PENDING"] and state == ACCOUNT_NONE:
+        context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+        context.user_data["account_draft"] = {"type": "WORKER"}
+        context.user_data["cached_role"] = "REGISTERING"
+        await update.message.reply_text("Let's continue your registration.\nEnter your full name:")
+        return
     # ================= ACCOUNT WIZARD HANDLER =================
     state = context.user_data.get("account_state", ACCOUNT_NONE)
 
