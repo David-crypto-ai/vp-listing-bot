@@ -173,14 +173,28 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = update.message.caption.strip()
 
     # --- START BUTTON ALWAYS FIRST ---
-    if text.strip().upper() in ["START", "▶ START", "/START"]:
+async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not update.message:
+        return
+
+    is_start = False
+
+    if update.message.text:
+        if update.message.text.lower().startswith("/start"):
+            is_start = True
+        elif update.message.text.strip().upper() in ["START", "▶ START"]:
+            is_start = True
+
+    if is_start:
         await start_button(update, context)
         return
 
     uid = str(update.effective_user.id)
 
     if uid not in SEEN_USERS and uid not in ROLE_CACHE:
-        await first_contact(update, context)
+        if update.message.text and not update.message.text.startswith("/start"):
+            await first_contact(update, context)
         return
 
     user = update.effective_user
@@ -602,7 +616,7 @@ app.add_handler(CallbackQueryHandler(approval_callback))
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=0)
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=1)
 
-app.add_handler(CommandHandler("start", start_button))
+app.add_handler(CommandHandler("start", route_message))
 app.add_handler(CommandHandler("testsheet", testsheet))
 
 print("Bot running...")
