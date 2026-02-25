@@ -183,7 +183,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("account_state", ACCOUNT_NONE)
 
     # ACTIVE USERS → always reopen menu if no wizard active
-    if status == "ACTIVE" and state == ACCOUNT_NONE:
+    if status == "ACTIVE" and state == ACCOUNT_NONE and text != PANEL_ACCOUNTS:
         context.user_data["cached_role"] = role
         await open_menu_for_role(update, context, role)
         return
