@@ -480,6 +480,28 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("Please send the location using the button.")
                 return
 
+    # ================= ACCOUNTS (ADMIN + WORKERS) =================
+    if text == PANEL_ACCOUNTS and status == "ACTIVE":
+
+        context.user_data["account_state"] = ACCOUNT_TYPE
+        context.user_data["account_draft"] = {}
+
+        keyboard = ReplyKeyboardMarkup(
+            [
+                [KeyboardButton("👤 OWNER")],
+                [KeyboardButton("🌐 ONLINE")],
+                [KeyboardButton("🏛️ AUCTION")],
+                [KeyboardButton("🔙 BACK")]
+            ],
+            resize_keyboard=True
+        )
+
+        await update.message.reply_text(
+            "Select account type:",
+            reply_markup=keyboard,
+        )
+        return
+
     # ================= ADMIN PANEL NAVIGATION =================
     if role == "ADMIN":
 
@@ -489,25 +511,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if text == PANEL_ITEMS:
             await update.message.reply_text("📦 ITEMS panel opened")
-            return
-
-        if text == PANEL_ACCOUNTS:
-            context.user_data["account_state"] = ACCOUNT_TYPE
-
-            keyboard = ReplyKeyboardMarkup(
-                [
-                    [KeyboardButton("👤 OWNER")],
-                    [KeyboardButton("🌐 ONLINE")],
-                    [KeyboardButton("🏛️ AUCTION")],
-                    [KeyboardButton("🔙 BACK")]
-                ],
-                resize_keyboard=True
-            )
-
-            await update.message.reply_text(
-                "Select account type:",
-                reply_markup=keyboard,
-            )
             return
 
         if text == PANEL_WORKFLOW:
