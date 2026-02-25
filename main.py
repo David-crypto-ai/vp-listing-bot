@@ -46,6 +46,7 @@ ACCOUNT_OWNER_CITY = 4
 ACCOUNT_OWNER_STATE = 5
 ACCOUNT_CONFIRM = 6
 ACCOUNT_LOCATION = 7
+ACCOUNT_PHOTO = 13
 ACCOUNT_EDIT_SELECT = 8
 ACCOUNT_EDIT_NAME = 9
 ACCOUNT_EDIT_PHONE = 10
@@ -298,25 +299,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             context.user_data["account_draft"]["phone"] = text
-            context.user_data["account_state"] = ACCOUNT_OWNER_CITY
-            await update.message.reply_text(
-                "Enter city:",
-                reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
-            )
-            return
-
-        # --- OWNER CITY ---
-        if state == ACCOUNT_OWNER_CITY:
-
-            if text == "🔙 BACK":
-                context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
-                await update.message.reply_text("Enter phone number:",
-                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True))
-                return
-
-            context.user_data["account_draft"]["city"] = text
             context.user_data["account_state"] = ACCOUNT_OWNER_STATE
-
             await update.message.reply_text(
                 "Enter state:",
                 reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
@@ -326,9 +309,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if state == ACCOUNT_OWNER_STATE:
 
             if text == "🔙 BACK":
-                context.user_data["account_state"] = ACCOUNT_OWNER_CITY
+                context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
                 await update.message.reply_text(
-                    "Enter city:",
+                    "Enter phone number:",
                     reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
                 )
                 return
@@ -343,8 +326,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Type: {draft['type']}\n"
                 f"Name: {draft['name']}\n"
                 f"Phone: {draft['phone']}\n"
-                f"City: {draft['city']}\n"
-                f"State: {draft['state']}",
+                f"State: {draft.get('state','')}",
                 reply_markup=confirm_keyboard()
             )
             return
@@ -366,22 +348,61 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             if text == "✅ CONFIRM":
-                context.user_data["account_state"] = ACCOUNT_LOCATION
 
-                keyboard = ReplyKeyboardMarkup(
-                    [[KeyboardButton("📍 SEND LOCATION", request_location=True)],
-                     [KeyboardButton("🔙 BACK")]],
-                    resize_keyboard=True
-                )
+                draft = context.user_data["account_draft"]
+
+                # Step 1: No location yet → go to location
+                if "maps_link" not in draft:
+                    context.user_data["account_state"] = ACCOUNT_LOCATION
+
+                    keyboard = ReplyKeyboardMarkup(
+                        [[KeyboardButton("📍 SEND LOCATION", request_location=True)],
+                         [KeyboardButton("🔙 BACK")]],
+                        resize_keyboard=True
+                    )
+
+                    await update.message.reply_text(
+                        "Send the yard location pin:",
+                        reply_markup=keyboard
+                    )
+                    return
+
+                # Step 2: No photo yet → go to photo
+                if "photo_file_id" not in draft:
+                    context.user_data["account_state"] = ACCOUNT_PHOTO
+
+                    await update.message.reply_text(
+                        "📸 Now send a yard photo:",
+                        reply_markup=ReplyKeyboardMarkup(
+                            [[KeyboardButton("🔙 BACK")]],
+                            resize_keyboard=True
+                        )
+                    )
+                    return
+
+                # Step 3: Everything collected → SAVE
+                if ENABLE_SHEETS:
+                    await run_sheet(
+                        context,
+                        create_owner,
+                        draft["type"],
+                        draft["name"],
+                        draft["phone"],
+                        draft.get("state", ""),
+                        "", "", draft.get("maps_link", ""), "",
+                        uid
+                    )
+                else:
+                    print("TEST MODE — OWNER WOULD BE SAVED:", draft)
 
                 await update.message.reply_text(
-                    "Send the yard location pin:",
-                    reply_markup=keyboard
+                    "✅ Account created successfully.",
+                    reply_markup=base_nav_keyboard()
                 )
+
+                clear_user_session(context)
+                await open_menu_for_role(update, context, role)
                 return
-
-            return
-
 
         # ================= EDIT SELECT =================
         if state == ACCOUNT_EDIT_SELECT:
@@ -437,8 +458,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Type: {draft['type']}\n"
                     f"Name: {draft['name']}\n"
                     f"Phone: {draft['phone']}\n"
-                    f"City: {draft['city']}\n"
-                    f"State: {draft['state']}",
+                    f"State: {draft.get('state','')}",
                     reply_markup=confirm_keyboard()
                 )
                 return
@@ -477,8 +497,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Type: {draft['type']}\n"
                 f"Name: {draft['name']}\n"
                 f"Phone: {draft['phone']}\n"
-                f"City: {draft['city']}\n"
-                f"State: {draft['state']}",
+                f"State: {draft.get('state','')}",
                 reply_markup=confirm_keyboard()
             )
             return
@@ -504,31 +523,17 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 city_state = f"{draft.get('city','')}, {draft.get('state','')}"
 
                 draft["maps_link"] = maps_link
-                draft["city_state"] = city_state
+                draft["city_state"] = draft.get("state", "")
 
-                if ENABLE_SHEETS:
-                    await run_sheet(
-                        context,
-                        create_owner,
-                        draft["type"],
-                        draft["name"],
-                        draft["phone"],
-                        draft["city_state"],
-                        "", "", draft["maps_link"], "",
-                        uid
-                    )
-                else:
-                    print("TEST MODE — OWNER WOULD BE SAVED:", draft)
+                context.user_data["account_state"] = ACCOUNT_PHOTO
 
                 await update.message.reply_text(
-                    f"Location saved:\n"
-                    f"{draft.get('name','')} ({city_state})\n"
-                    f"{maps_link}",
-                    reply_markup=base_nav_keyboard()
+                    "📸 Now send a yard photo:",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [[KeyboardButton("🔙 BACK")]],
+                        resize_keyboard=True
+                    )
                 )
-
-                clear_user_session(context)
-                await open_menu_for_role(update, context, role)
                 return
 
             else:
@@ -536,6 +541,45 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "Please send the location using the button."
                 )
                 return
+
+        # ================= PHOTO CAPTURE =================
+        if state == ACCOUNT_PHOTO:
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_LOCATION
+                keyboard = ReplyKeyboardMarkup(
+                    [[KeyboardButton("📍 SEND LOCATION", request_location=True)],
+                     [KeyboardButton("🔙 BACK")]],
+                    resize_keyboard=True
+                )
+                await update.message.reply_text(
+                    "Send location again:",
+                    reply_markup=keyboard
+                )
+                return
+
+            if update.message.photo:
+                draft = context.user_data.setdefault("account_draft", {})
+
+                photo = update.message.photo[-1]
+                draft["photo_file_id"] = photo.file_id
+
+                context.user_data["account_state"] = ACCOUNT_CONFIRM
+
+                await update.message.reply_text(
+                    f"Review account:\n"
+                    f"Type: {draft['type']}\n"
+                    f"Name: {draft['name']}\n"
+                    f"Phone: {draft['phone']}\n"
+                    f"State: {draft.get('state','')}\n"
+                    f"Location: ✅\n"
+                    f"Photo: ✅",
+                    reply_markup=confirm_keyboard()
+                )
+                return
+
+            await update.message.reply_text("Please send a photo.")
+            return
 
     # ================= ACCOUNTS (ADMIN + WORKERS) =================
     if text == PANEL_ACCOUNTS and status == "ACTIVE":
