@@ -10,7 +10,7 @@ from telegram.ext import (
     filters
 )
 
-from sheets_logger import create_draft
+from sheets_logger import create_owner
 from users import register_user_pending, ensure_admin, get_user_status_role
 from menus import (
     open_menu_for_role,
@@ -24,6 +24,7 @@ async def debug_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 
+ENABLE_SHEETS = False  # Set to True when going live
 ROLE_CACHE = {}
 ADMIN_CACHE = set()
 SEEN_USERS = set()
@@ -42,12 +43,14 @@ ACCOUNT_TYPE = 1
 ACCOUNT_OWNER_NAME = 2
 ACCOUNT_OWNER_PHONE = 3
 ACCOUNT_OWNER_CITY = 4
-ACCOUNT_CONFIRM = 5
-ACCOUNT_LOCATION = 6
-ACCOUNT_EDIT_SELECT = 7
-ACCOUNT_EDIT_NAME = 8
-ACCOUNT_EDIT_PHONE = 9
-ACCOUNT_EDIT_CITY = 10
+ACCOUNT_OWNER_STATE = 5
+ACCOUNT_CONFIRM = 6
+ACCOUNT_LOCATION = 7
+ACCOUNT_EDIT_SELECT = 8
+ACCOUNT_EDIT_NAME = 9
+ACCOUNT_EDIT_PHONE = 10
+ACCOUNT_EDIT_CITY = 11
+ACCOUNT_EDIT_STATE = 12
 ACCOUNT_BUSY = 99
 
 def base_nav_keyboard():
@@ -68,6 +71,7 @@ def edit_menu_keyboard():
             [KeyboardButton("Name")],
             [KeyboardButton("Phone")],
             [KeyboardButton("City")],
+            [KeyboardButton("State")],
             [KeyboardButton("Location")],
             [KeyboardButton("🔙 BACK")]
         ],
@@ -133,16 +137,19 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ---------- BRAND NEW USER ----------
-    await run_sheet(
-        context,
-        register_user_pending,
-        telegram_id=uid,
-        username=user.username or "",
-        full_name=user.full_name
-    )
+    if ENABLE_SHEETS:
+        await run_sheet(
+            context,
+            register_user_pending,
+            telegram_id=uid,
+            username=user.username or "",
+            full_name=user.full_name
+        )
 
-    from users import notify_admin_new_user
-    await notify_admin_new_user(context, uid, user.username or "", user.full_name)
+        from users import notify_admin_new_user
+        await notify_admin_new_user(context, uid, user.username or "", user.full_name)
+    else:
+        print("TEST MODE — USER WOULD BE REGISTERED:", uid)
 
     ROLE_CACHE[uid] = ("REGISTERING", "REGISTERING")
 
@@ -308,6 +315,25 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             context.user_data["account_draft"]["city"] = text
+            context.user_data["account_state"] = ACCOUNT_OWNER_STATE
+
+            await update.message.reply_text(
+                "Enter state:",
+                reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+            )
+            return
+
+        if state == ACCOUNT_OWNER_STATE:
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_OWNER_CITY
+                await update.message.reply_text(
+                    "Enter city:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
+                return
+
+            context.user_data["account_draft"]["state"] = text
             context.user_data["account_state"] = ACCOUNT_CONFIRM
 
             draft = context.user_data["account_draft"]
@@ -317,7 +343,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Type: {draft['type']}\n"
                 f"Name: {draft['name']}\n"
                 f"Phone: {draft['phone']}\n"
-                f"City: {draft['city']}",
+                f"City: {draft['city']}\n"
+                f"State: {draft['state']}",
                 reply_markup=confirm_keyboard()
             )
             return
@@ -383,6 +410,14 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
+            if text == "State":
+                context.user_data["account_state"] = ACCOUNT_EDIT_STATE
+                await update.message.reply_text(
+                    "Enter new state:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
+                return
+
             if text == "Location":
                 context.user_data["account_state"] = ACCOUNT_LOCATION
                 keyboard = ReplyKeyboardMarkup(
@@ -402,7 +437,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Type: {draft['type']}\n"
                     f"Name: {draft['name']}\n"
                     f"Phone: {draft['phone']}\n"
-                    f"City: {draft['city']}",
+                    f"City: {draft['city']}\n"
+                    f"State: {draft['state']}",
                     reply_markup=confirm_keyboard()
                 )
                 return
@@ -411,7 +447,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
         # ================= APPLY EDIT =================
-        if state in [ACCOUNT_EDIT_NAME, ACCOUNT_EDIT_PHONE, ACCOUNT_EDIT_CITY]:
+        if state in [ACCOUNT_EDIT_NAME, ACCOUNT_EDIT_PHONE, ACCOUNT_EDIT_CITY, ACCOUNT_EDIT_STATE]:
 
             if text == "🔙 BACK":
                 context.user_data["account_state"] = ACCOUNT_EDIT_SELECT
@@ -430,6 +466,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif state == ACCOUNT_EDIT_CITY:
                 context.user_data["account_draft"]["city"] = text
 
+            elif state == ACCOUNT_EDIT_STATE:
+                context.user_data["account_draft"]["state"] = text
+
             context.user_data["account_state"] = ACCOUNT_CONFIRM
             draft = context.user_data["account_draft"]
 
@@ -438,7 +477,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Type: {draft['type']}\n"
                 f"Name: {draft['name']}\n"
                 f"Phone: {draft['phone']}\n"
-                f"City: {draft['city']}",
+                f"City: {draft['city']}\n"
+                f"State: {draft['state']}",
                 reply_markup=confirm_keyboard()
             )
             return
@@ -446,10 +486,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ================= LOCATION CAPTURE =================
         if state == ACCOUNT_LOCATION:
 
-            # allow escape
             if text == "🔙 BACK":
                 context.user_data["account_state"] = ACCOUNT_CONFIRM
-                await update.message.reply_text("Back to review:", reply_markup=confirm_keyboard())
+                await update.message.reply_text(
+                    "Back to review:",
+                    reply_markup=confirm_keyboard()
+                )
                 return
 
             if update.message.location:
@@ -457,18 +499,31 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 loc = update.message.location
                 draft = context.user_data.setdefault("account_draft", {})
-                draft["lat"] = loc.latitude
-                draft["lng"] = loc.longitude
 
-                context.application.create_task(
-                    run_sheet(context, create_draft, str(user.id), draft)
-                )
+                maps_link = f"https://maps.google.com/?q={loc.latitude},{loc.longitude}"
+                city_state = f"{draft.get('city','')}, {draft.get('state','')}"
+
+                draft["maps_link"] = maps_link
+                draft["city_state"] = city_state
+
+                if ENABLE_SHEETS:
+                    await run_sheet(
+                        context,
+                        create_owner,
+                        draft["type"],
+                        draft["name"],
+                        draft["phone"],
+                        draft["city_state"],
+                        "", "", draft["maps_link"], "",
+                        uid
+                    )
+                else:
+                    print("TEST MODE — OWNER WOULD BE SAVED:", draft)
 
                 await update.message.reply_text(
                     f"Location saved:\n"
-                    f"{draft.get('name','')} ({draft.get('city','')})\n"
-                    f"Lat: {draft.get('lat','')}\n"
-                    f"Lng: {draft.get('lng','')}",
+                    f"{draft.get('name','')} ({city_state})\n"
+                    f"{maps_link}",
                     reply_markup=base_nav_keyboard()
                 )
 
@@ -477,7 +532,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             else:
-                await update.message.reply_text("Please send the location using the button.")
+                await update.message.reply_text(
+                    "Please send the location using the button."
+                )
                 return
 
     # ================= ACCOUNTS (ADMIN + WORKERS) =================
@@ -532,13 +589,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text == PANEL_SYSTEM:
             await update.message.reply_text("⚙️ SYSTEM panel opened")
             return
-
-# =========================================================
-# TEST SHEET
-# =========================================================
-async def testsheet(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await run_sheet(context, create_draft, str(update.effective_user.id), "manual test")
-    await update.message.reply_text("Draft created 📄")
 
 async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -619,7 +669,6 @@ app.add_handler(CommandHandler("start", start_button), group=0)
 # Then normal routing
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
-app.add_handler(CommandHandler("testsheet", testsheet))
 
 async def error_handler(update, context):
     print("ERROR OCCURRED:", context.error)
