@@ -192,23 +192,28 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("account_state", ACCOUNT_NONE)
 
     # ACTIVE USERS → reopen menu only if user typed random text
-    if status == "ACTIVE" and state == ACCOUNT_NONE and text not in [
-        PANEL_ACCOUNTS,
-        PANEL_ITEMS,
-        PANEL_WORKFLOW,
-        PANEL_USERS,
-        PANEL_TASKS,
-        PANEL_REPORTS,
-        PANEL_SYSTEM,
-        PANEL_BACK,
-        "➕ ADD ACCOUNT",
-        "👤 MY ACCOUNTS",
-        "📍 NEARBY ACCOUNTS",
-        "🔎 SEARCH ACCOUNT"
-    ]:
+    if status == "ACTIVE" and state == ACCOUNT_NONE:
+
+        # always refresh role menu after updates
         context.user_data["cached_role"] = role
-        await open_menu_for_role(update, context, role)
-        return
+
+        # if user pressed something unknown or menu button → reload latest menu
+        if text not in [
+            PANEL_ACCOUNTS,
+            PANEL_ITEMS,
+            PANEL_WORKFLOW,
+            PANEL_USERS,
+            PANEL_TASKS,
+            PANEL_REPORTS,
+            PANEL_SYSTEM,
+            PANEL_BACK,
+            "➕ ADD ACCOUNT",
+            "👤 MY ACCOUNTS",
+            "📍 NEARBY ACCOUNTS",
+            "🔎 SEARCH ACCOUNT"
+        ]:
+            await open_menu_for_role(update, context, role)
+            return
 
     # PENDING USERS → always inform
     if status == "PENDING":

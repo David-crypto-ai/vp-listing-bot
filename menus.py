@@ -144,6 +144,6 @@ async def open_menu_for_role(update, context, role: str):
     keyboard = menu_for_role(role)
 
     await update.message.reply_text(
-        f"Opened {role} menu",
+        "📋 Menu",
         reply_markup=keyboard
     )
