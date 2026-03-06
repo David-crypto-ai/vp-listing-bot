@@ -599,7 +599,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 photo = update.message.photo[-1]
                 draft["photo_file_id"] = photo.file_id
-                draft["photo_url"] = f"https://api.telegram.org/file/bot{TOKEN}/{photo.file_id}"
+
+                file = await context.bot.get_file(photo.file_id)
+                draft["photo_url"] = file.file_path
 
                 context.user_data["account_state"] = ACCOUNT_CONFIRM
 
