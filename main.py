@@ -14,6 +14,7 @@ from sheets_logger import create_owner
 from users import register_user_pending, ensure_admin, get_user_status_role
 from menus import (
     open_menu_for_role,
+    accounts_menu,
     PANEL_ITEMS, PANEL_ACCOUNTS, PANEL_WORKFLOW, PANEL_USERS,
     PANEL_TASKS, PANEL_REPORTS, PANEL_SYSTEM, PANEL_BACK
 )
@@ -190,8 +191,21 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ===== AUTO SESSION RECOVERY (CRITICAL) =====
     state = context.user_data.get("account_state", ACCOUNT_NONE)
 
-    # ACTIVE USERS → always reopen menu if no wizard active
-    if status == "ACTIVE" and state == ACCOUNT_NONE and text != PANEL_ACCOUNTS:
+    # ACTIVE USERS → reopen menu only if user typed random text
+    if status == "ACTIVE" and state == ACCOUNT_NONE and text not in [
+        PANEL_ACCOUNTS,
+        PANEL_ITEMS,
+        PANEL_WORKFLOW,
+        PANEL_USERS,
+        PANEL_TASKS,
+        PANEL_REPORTS,
+        PANEL_SYSTEM,
+        PANEL_BACK,
+        "➕ ADD ACCOUNT",
+        "👤 MY ACCOUNTS",
+        "📍 NEARBY ACCOUNTS",
+        "🔎 SEARCH ACCOUNT"
+    ]:
         context.user_data["cached_role"] = role
         await open_menu_for_role(update, context, role)
         return
@@ -584,6 +598,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ================= ACCOUNTS (ADMIN + WORKERS) =================
     if text == PANEL_ACCOUNTS and status == "ACTIVE":
 
+        await update.message.reply_text(
+            "Accounts Menu",
+            reply_markup=accounts_menu()
+        )
+        return
+
+    # ================= ADD ACCOUNT =================
+    if text == "➕ ADD ACCOUNT" and status == "ACTIVE":
+
         context.user_data["account_state"] = ACCOUNT_TYPE
         context.user_data["account_draft"] = {}
 
@@ -603,11 +626,44 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # ================= MY ACCOUNTS =================
+    if text == "👤 MY ACCOUNTS" and status == "ACTIVE":
+
+        await update.message.reply_text(
+            "📋 Your accounts will appear here (Google Sheets integration coming next)."
+        )
+        return
+
+
+    # ================= NEARBY ACCOUNTS =================
+    if text == "📍 NEARBY ACCOUNTS" and status == "ACTIVE":
+
+        await update.message.reply_text(
+            "📍 Nearby accounts feature coming soon."
+        )
+        return
+
+
+    # ================= SEARCH ACCOUNT =================
+    if text == "🔎 SEARCH ACCOUNT" and status == "ACTIVE":
+
+        await update.message.reply_text(
+            "🔎 Send a name or phone number to search accounts (feature coming next)."
+        )
+        return
+        
     # ================= ADMIN PANEL NAVIGATION =================
     if role == "ADMIN":
 
         if text == PANEL_BACK:
             await open_menu_for_role(update, context, role)
+            return
+
+        if text == PANEL_ACCOUNTS:
+            await update.message.reply_text(
+                "Accounts Menu",
+                reply_markup=accounts_menu()
+            )
             return
 
         if text == PANEL_ITEMS:

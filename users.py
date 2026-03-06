@@ -18,14 +18,26 @@ TAB_PERMS = "USER_PERMISSIONS"
 # ================================
 # GOOGLE CLIENT
 # ================================
+_CLIENT = None
+
 def _client():
+    global _CLIENT
+
+    if _CLIENT:
+        return _CLIENT
+
     creds_dict = json.loads(GOOGLE_CREDENTIALS)
+
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive"
     ]
+
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    return gspread.authorize(creds)
+
+    _CLIENT = gspread.authorize(creds)
+
+    return _CLIENT
 
 
 def _worksheet(name, headers):

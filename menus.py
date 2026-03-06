@@ -17,12 +17,12 @@ BTN_HELP = "❓ HELP"
 BTN_NEW_TODO = "🆕 NEW TO DO"
 BTN_COMPLETE_TASK = "✅ COMPLETE TASK"
 BTN_MY_ACCOUNTS = "👤 MY ACCOUNTS"
+BTN_ADD_ACCOUNT = "➕ ADD ACCOUNT"
 BTN_FOLLOW_UP = "📞 FOLLOW UP CONTACT"
 BTN_EDIT_ITEM = "🏷️ EDIT ITEM"
 
 # Finder
 BTN_NEW_ITEM = "📦 NEW ITEM"
-BTN_ADD_OWNER = "👤 ADD OWNER"
 BTN_MY_ITEMS = "🗂️ MY ITEMS"
 
 # Seller
@@ -37,6 +37,9 @@ BTN_HIDE_ITEM = "🙈 HIDE ITEM"
 BTN_ASSIGN_SELLER = "🧑‍💼 ASSIGN SELLER"
 BTN_VIEW_PENDING = "🗂️ VIEW PENDING"
 BTN_REPORTS_ACTION = "📊 VIEW REPORTS"
+
+BTN_NEARBY_ACCOUNTS = "📍 NEARBY ACCOUNTS"
+BTN_SEARCH_ACCOUNT = "🔎 SEARCH ACCOUNT"
 
 # Admin special
 BTN_APPROVE_NEW_WORKER = "👤 APPROVE NEW WORKER"
@@ -54,6 +57,19 @@ def kb(rows):
 
 def start_keyboard():
     return kb([[BTN_START]])
+
+
+# =============================
+# ACCOUNTS MENU
+# =============================
+def accounts_menu():
+    return kb([
+        [BTN_ADD_ACCOUNT],
+        [BTN_MY_ACCOUNTS],
+        [BTN_NEARBY_ACCOUNTS],
+        [BTN_SEARCH_ACCOUNT],
+        [PANEL_BACK],
+    ])
 
 
 # =============================
@@ -78,10 +94,8 @@ def menu_for_role(role: str) -> ReplyKeyboardMarkup:
     # FINDER
     if role == "FINDER":
         return kb([
-            [BTN_NEW_ITEM, BTN_ADD_OWNER],
-            [BTN_MY_ITEMS, BTN_EDIT_ITEM],
-            [BTN_MY_ACCOUNTS, BTN_FOLLOW_UP],
-            [BTN_NEW_TODO, BTN_COMPLETE_TASK],
+            [BTN_NEW_ITEM, BTN_MY_ITEMS],
+            [PANEL_ACCOUNTS, PANEL_TASKS],
             [BTN_HELP],
         ])
 
@@ -89,20 +103,19 @@ def menu_for_role(role: str) -> ReplyKeyboardMarkup:
     if role == "SELLER":
         return kb([
             [BTN_GET_PRICE, BTN_MARK_SOLD],
-            [BTN_MY_SALES, BTN_EDIT_ITEM],
-            [BTN_MY_ACCOUNTS, BTN_FOLLOW_UP],
-            [BTN_NEW_TODO, BTN_COMPLETE_TASK],
+            [BTN_MY_SALES],
+            [BTN_MY_ITEMS],
+            [PANEL_ACCOUNTS, PANEL_TASKS],
             [BTN_HELP],
         ])
 
     # BOTH
     if role in ("FINDER+SELLER", "BOTH"):
         return kb([
-            [BTN_NEW_ITEM, BTN_ADD_OWNER],
-            [BTN_MY_ITEMS, BTN_GET_PRICE],
-            [BTN_MARK_SOLD, BTN_EDIT_ITEM],
-            [BTN_MY_ACCOUNTS, BTN_FOLLOW_UP],
-            [BTN_NEW_TODO, BTN_COMPLETE_TASK],
+            [BTN_NEW_ITEM, BTN_MY_ITEMS],
+            [BTN_GET_PRICE, BTN_MARK_SOLD],
+            [BTN_MY_SALES],
+            [PANEL_ACCOUNTS, PANEL_TASKS],
             [BTN_HELP],
         ])
 

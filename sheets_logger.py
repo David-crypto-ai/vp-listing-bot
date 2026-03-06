@@ -107,18 +107,54 @@ TASKS_SCHEMA = [
 ]
 
 # ---------------- CONNECT ----------------
+# ---------------- SCHEMA VALIDATION ----------------
+
+def _validate_schema(ws, expected_schema, sheet_name):
+    header = ws.row_values(1)
+
+    if not header:
+        raise Exception(f"❌ {sheet_name} has no header row.")
+
+    # exact match required for safety
+    if header[:len(expected_schema)] != expected_schema:
+        raise Exception(
+            f"""
+❌ SCHEMA MISMATCH in {sheet_name}
+
+Expected:
+{expected_schema}
+
+Found:
+{header}
+
+Fix the sheet header manually before running the bot.
+"""
+        )
+
+_CLIENT = None
 
 def _client():
+    global _CLIENT
+
+    if _CLIENT:
+        return _CLIENT
+
     creds_dict = json.loads(GOOGLE_CREDENTIALS)
+
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive"
     ]
+
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    return gspread.authorize(creds)
+
+    _CLIENT = gspread.authorize(creds)
+
+    return _CLIENT
 
 def _get_ws(title: str, schema: list, rows="5000", cols="60"):
     ss = _client().open_by_key(SPREADSHEET_ID)
+
     try:
         ws = ss.worksheet(title)
     except Exception:
@@ -127,14 +163,14 @@ def _get_ws(title: str, schema: list, rows="5000", cols="60"):
         return ws
 
     header = ws.row_values(1)
+
     if not header:
         ws.append_row(schema)
         return ws
 
-    # add missing columns
-    missing = [c for c in schema if c not in header]
-    if missing:
-        ws.update("1:1", [header + missing])
+    # validate schema instead of modifying it
+    _validate_schema(ws, schema, title)
+
     return ws
 
 def items_ws():
