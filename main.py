@@ -1,6 +1,6 @@
 import os
 from telegram.ext import CallbackQueryHandler
-from users import assign_role
+from users import assign_role, register_user_pending, ensure_admin, get_user_status_role
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     ApplicationBuilder,
@@ -11,7 +11,6 @@ from telegram.ext import (
 )
 
 from sheets_logger import create_owner
-from users import register_user_pending, ensure_admin, get_user_status_role
 from menus import (
     open_menu_for_role,
     accounts_menu,
@@ -400,28 +399,46 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
 
                 # Step 3: Everything collected → SAVE
-                if ENABLE_SHEETS:
-                    await run_sheet(
-                        context,
-                        create_owner,
-                        draft["type"],
-                        draft["name"],
-                        draft["phone"],
-                        draft.get("state", ""),
-                        "", "", draft.get("maps_link", ""), "",
-                        uid
+                lock_user(context)
+                save_success = False
+
+                try:
+                    if ENABLE_SHEETS:
+                        await run_sheet(
+                            context,
+                            create_owner,
+                            draft["type"],
+                            draft["name"],
+                            draft["phone"],
+                            draft.get("city",""),
+                            draft.get("state",""),
+                            "",
+                            draft.get("maps_link",""),
+                            draft.get("photo_url",""),
+                            uid
+                        )
+                    else:
+                        print("TEST MODE — OWNER WOULD BE SAVED:", draft)
+
+                    save_success = True
+
+                except Exception as e:
+                    print("OWNER SAVE ERROR:", e)
+
+                if save_success:
+                    await update.message.reply_text(
+                        "✅ Account created successfully.",
+                        reply_markup=base_nav_keyboard()
                     )
+                    clear_user_session(context)
+                    await open_menu_for_role(update, context, role)
+                    return
                 else:
-                    print("TEST MODE — OWNER WOULD BE SAVED:", draft)
-
-                await update.message.reply_text(
-                    "✅ Account created successfully.",
-                    reply_markup=base_nav_keyboard()
-                )
-
-                clear_user_session(context)
-                await open_menu_for_role(update, context, role)
-                return
+                    await update.message.reply_text(
+                        "❌ Error saving account. Please try again.",
+                        reply_markup=confirm_keyboard()
+                    )
+                    return
 
         # ================= EDIT SELECT =================
         if state == ACCOUNT_EDIT_SELECT:
@@ -582,6 +599,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 photo = update.message.photo[-1]
                 draft["photo_file_id"] = photo.file_id
+                draft["photo_url"] = f"https://api.telegram.org/file/bot{TOKEN}/{photo.file_id}"
 
                 context.user_data["account_state"] = ACCOUNT_CONFIRM
 
