@@ -25,7 +25,7 @@ async def debug_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 
-ENABLE_SHEETS = False  # Set to True when going live
+ENABLE_SHEETS = True  # Set to True when going live
 ROLE_CACHE = {}
 ADMIN_CACHE = set()
 SEEN_USERS = set()

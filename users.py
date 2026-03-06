@@ -261,3 +261,179 @@ async def notify_admin_new_user(context, telegram_id, username, full_name):
             )
         except Exception:
             pass
+
+# ================================
+# OWNERS TABLE
+# ================================
+TAB_OWNERS = "OWNERS_MASTER"
+
+def owners_sheet():
+    return _worksheet(TAB_OWNERS, [
+        "OWNER_ID",
+        "OWNER_TYPE",
+        "OWNER_NAME",
+        "OWNER_PHONE",
+        "OWNER_EMAIL",
+        "CITY_STATE",
+        "SOURCE_PLATFORM",
+        "SOURCE_LINK",
+        "MAPS_LINK",
+        "LOCATION_PHOTO_URL",
+        "CLAIMED_BY_FINDER_ID",
+        "OWNER_STATUS",
+        "APPROVED_BY",
+        "CREATED_AT",
+        "LAST_CONTACTED_AT",
+        "NOTES",
+        "LOCATION_COORDS"
+    ])
+
+
+# ================================
+# OWNER ID GENERATOR
+# ================================
+def _next_owner_id():
+
+    sh = owners_sheet()
+    rows = sh.get_all_values()
+
+    if len(rows) <= 1:
+        return "OWN0001"
+
+    last = rows[-1][0]
+
+    try:
+        num = int(last.replace("OWN", ""))
+        num += 1
+    except:
+        num = len(rows)
+
+    return f"OWN{num:04d}"
+
+# ================================
+# LOCATION DISTANCE (METERS)
+# ================================
+import math
+
+def _distance_meters(lat1, lon1, lat2, lon2):
+
+    R = 6371000  # Earth radius in meters
+
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+    return R * c
+
+# ================================
+# LOCATION CACHE (FAST SEARCH)
+# ================================
+_OWNER_LOCATION_CACHE = None
+
+def _load_owner_locations():
+
+    global _OWNER_LOCATION_CACHE
+
+    if _OWNER_LOCATION_CACHE is not None:
+        return _OWNER_LOCATION_CACHE
+
+    sh = owners_sheet()
+    rows = sh.get_all_values()[1:]
+
+    cache = []
+
+    for r in rows:
+
+        try:
+            link = r[8]
+            coord = link.split("?q=")[1]
+            lat, lon = map(float, coord.split(","))
+
+            cache.append({
+                "lat": lat,
+                "lon": lon
+            })
+
+        except:
+            pass
+
+    _OWNER_LOCATION_CACHE = cache
+
+    return cache
+
+# ================================
+# CREATE OWNER
+# ================================
+def create_owner(owner_type, name, phone, state, city, address, maps_link, photo_file_id, created_by):
+
+    sh = owners_sheet()
+    rows = sh.get_all_values()
+    locations = _load_owner_locations()
+    owner_id = _next_owner_id()
+
+    # extract new coordinates
+    try:
+        coord = maps_link.split("?q=")[1]
+        new_lat, new_lon = map(float, coord.split(","))
+    except Exception:
+        new_lat, new_lon = None, None
+
+    for r, loc in zip(rows[1:], locations):
+
+        # duplicate phone check
+        if len(r) > 3 and r[3] == str(phone):
+            return {
+                "status": "DUPLICATE_PHONE",
+            }
+
+        # duplicate location check
+        try:
+            lat = loc["lat"]
+            lon = loc["lon"]
+
+            if new_lat is not None:
+
+                distance = _distance_meters(new_lat, new_lon, lat, lon)
+
+                if distance <= 100:
+                    return {
+                        "status": "DUPLICATE_LOCATION",
+                        "distance_m": int(distance)
+                    }
+
+        except Exception:
+            pass
+
+    # store pending for admin approval
+    sh.append_row([
+        owner_id,                         # OWNER_ID
+        safe_text(owner_type),            # OWNER_TYPE
+        safe_text(name),                  # OWNER_NAME
+        safe_text(phone),                 # OWNER_PHONE
+        "",                               # OWNER_EMAIL
+        f"{safe_text(city)}, {safe_text(state)}",  # CITY_STATE
+        "telegram_bot",                   # SOURCE_PLATFORM
+        "",                               # SOURCE_LINK
+        safe_text(maps_link),             # MAPS_LINK
+        safe_text(photo_file_id or ""),   # LOCATION_PHOTO_URL
+        "",                               # CLAIMED_BY_FINDER_ID
+        "PENDING",                        # OWNER_STATUS
+        "",                               # APPROVED_BY
+        now_str(),                        # CREATED_AT
+        "",                               # LAST_CONTACTED_AT
+        "",                               # NOTES
+        f"{new_lat},{new_lon}" if new_lat else ""  # LOCATION_COORDS
+    ])
+
+    # refresh location cache
+    global _OWNER_LOCATION_CACHE
+    _OWNER_LOCATION_CACHE = None
+
+    return {
+        "status": "CREATED_PENDING"
+    }

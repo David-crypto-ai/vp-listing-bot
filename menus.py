@@ -143,6 +143,7 @@ def menu_for_role(role: str) -> ReplyKeyboardMarkup:
 async def open_menu_for_role(update, context, role: str):
     keyboard = menu_for_role(role)
 
+    target = update.message or update.callback_query.message
     await update.message.reply_text(
         "📋 Menu",
         reply_markup=keyboard
