@@ -173,7 +173,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # capture message text safely (buttons, captions, etc)
-    text = (update.message.text or "").strip()
+    text = (update.message.text or "").strip().upper()
     if not text and update.message.caption:
         text = update.message.caption.strip()
 
@@ -353,12 +353,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- CONFIRMATION STEP ---
         if state == ACCOUNT_CONFIRM:
 
-            if text == "❌ CANCEL":
+            if "CANCEL" in text:
                 clear_user_session(context)
                 await open_menu_for_role(update, context, role)
                 return
 
-            if text == "✏ EDIT":
+            if "EDIT" in text:
                 context.user_data["account_state"] = ACCOUNT_EDIT_SELECT
                 await update.message.reply_text(
                     "Select field to edit:",
@@ -366,7 +366,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            if text == "✅ CONFIRM":
+            if "CONFIRM" in text:
 
                 draft = context.user_data["account_draft"]
 
