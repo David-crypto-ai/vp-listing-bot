@@ -423,7 +423,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     save_success = True
 
                 except Exception as e:
-                    print("OWNER SAVE ERROR:", e)
+                    print("OWNER SAVE ERROR:", repr(e))
+                    unlock_user(context, ACCOUNT_CONFIRM)
 
                 if save_success:
                     await update.message.reply_text(
@@ -804,5 +805,6 @@ print("Bot running...")
 app.run_polling(
     drop_pending_updates=True,
     poll_interval=0.1,
-    timeout=10,
+    timeout=30,
+    bootstrap_retries=5,
 )
