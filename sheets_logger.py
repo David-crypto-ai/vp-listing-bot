@@ -66,6 +66,7 @@ OWNERS_SCHEMA = [
     "OWNER_TYPE",          # Truck Owner / Online Owner / Auction Company
     "OWNER_NAME",
     "OWNER_PHONE",
+    "OWNER_EMAIL",
     "CITY_STATE",
     "SOURCE_PLATFORM",
     "SOURCE_LINK",
@@ -77,6 +78,7 @@ OWNERS_SCHEMA = [
     "CREATED_AT",
     "LAST_CONTACTED_AT",
     "NOTES",
+    "LOCATION_COORDS",
 ]
 
 LOG_SCHEMA = [
