@@ -18,8 +18,14 @@ from menus import (
     PANEL_TASKS, PANEL_REPORTS, PANEL_SYSTEM, PANEL_BACK
 )
 
+def log_line(label, value=""):
+    print(f"[BOT DEBUG] {label}: {value}")
+
+def log_block(title):
+    print(f"\n========== {title} ==========")
+
 async def debug_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("\n=========== UPDATE RECEIVED ===========")
+    log_block("UPDATE RECEIVED")
     print(update)
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
@@ -402,6 +408,16 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 lock_user(context)
                 save_success = False
 
+                log_block("OWNER SAVE DEBUG")
+                log_line("TYPE", draft.get("type"))
+                log_line("NAME", draft.get("name"))
+                log_line("PHONE", draft.get("phone"))
+                log_line("CITY", draft.get("city"))
+                log_line("STATE", draft.get("state"))
+                log_line("MAPS_LINK", draft.get("maps_link"))
+                log_line("PHOTO_URL", draft.get("photo_url"))
+                log_line("UID", uid)
+
                 try:
                     if ENABLE_SHEETS:
                         await run_sheet(
@@ -423,7 +439,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     save_success = True
 
                 except Exception as e:
-                    print("OWNER SAVE ERROR:", repr(e))
+                    log_block("OWNER SAVE ERROR")
+                    log_line("ERROR", repr(e))
+                    log_line("DRAFT DATA", draft)
                     unlock_user(context, ACCOUNT_CONFIRM)
 
                 if save_success:
@@ -551,13 +569,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             if update.message.location:
-                lock_user(context)
-
                 loc = update.message.location
                 draft = context.user_data.setdefault("account_draft", {})
 
                 maps_link = f"https://maps.google.com/?q={loc.latitude},{loc.longitude}"
-                city_state = f"{draft.get('city','')}, {draft.get('state','')}"
+
+                log_block("LOCATION RECEIVED")
+                log_line("LAT", loc.latitude)
+                log_line("LON", loc.longitude)
+                log_line("MAPS_LINK", maps_link)
 
                 draft["maps_link"] = maps_link
                 draft["city_state"] = draft.get("state", "")
@@ -601,8 +621,13 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 photo = update.message.photo[-1]
                 draft["photo_file_id"] = photo.file_id
 
+                log_block("PHOTO RECEIVED")
+                log_line("FILE_ID", photo.file_id)
+
                 file = await context.bot.get_file(photo.file_id)
                 draft["photo_url"] = file.file_path
+
+                log_line("FILE_PATH", draft["photo_url"])
 
                 context.user_data["account_state"] = ACCOUNT_CONFIRM
 
@@ -797,7 +822,9 @@ app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
 
 async def error_handler(update, context):
-    print("ERROR OCCURRED:", context.error)
+    log_block("GLOBAL ERROR")
+    log_line("ERROR", repr(context.error))
+    log_line("UPDATE", update)
 
 app.add_error_handler(error_handler)
 
