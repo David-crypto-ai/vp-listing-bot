@@ -1,7 +1,7 @@
 import os
 from telegram.ext import CallbackQueryHandler
 from users import assign_role, register_user_pending, ensure_admin, get_user_status_role
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -10,7 +10,8 @@ from telegram.ext import (
     filters
 )
 
-from sheets_logger import create_owner
+from sheets_logger import create_owner_submission, check_nearby_accounts, approve_owner_submission
+from config import ADMIN_IDS
 from menus import (
     open_menu_for_role,
     accounts_menu,
@@ -53,12 +54,98 @@ ACCOUNT_OWNER_STATE = 5
 ACCOUNT_CONFIRM = 6
 ACCOUNT_LOCATION = 7
 ACCOUNT_PHOTO = 13
+ACCOUNT_DUPLICATE_CHECK = 14
 ACCOUNT_EDIT_SELECT = 8
 ACCOUNT_EDIT_NAME = 9
 ACCOUNT_EDIT_PHONE = 10
 ACCOUNT_EDIT_CITY = 11
 ACCOUNT_EDIT_STATE = 12
 ACCOUNT_BUSY = 99
+
+# ================= STATE SELECTOR =================
+
+STATE_LIST = [
+
+    # ---- MEXICO (priority trucking states first) ----
+    "CHIHUAHUA",
+    "NUEVO LEON",
+    "COAHUILA",
+    "TAMAULIPAS",
+    "SONORA",
+    "BAJA CALIFORNIA",
+    "JALISCO",
+    "GUANAJUATO",
+    "QUERETARO",
+    "SAN LUIS POTOSI",
+    "MEXICO",
+    "CDMX",
+    "AGUASCALIENTES",
+    "ZACATECAS",
+    "DURANGO",
+    "MICHOACAN",
+    "PUEBLA",
+    "VERACRUZ",
+    "YUCATAN",
+    "QUINTANA ROO",
+
+    # ---- USA (auction + trucking heavy states first) ----
+    "TEXAS",
+    "CALIFORNIA",
+    "ARIZONA",
+    "NEW MEXICO",
+    "OKLAHOMA",
+    "KANSAS",
+    "MISSOURI",
+    "ARKANSAS",
+    "LOUISIANA",
+    "ILLINOIS",
+    "INDIANA",
+    "OHIO",
+    "GEORGIA",
+    "FLORIDA",
+    "TENNESSEE",
+    "KENTUCKY",
+    "COLORADO",
+    "UTAH",
+    "NEVADA",
+    "WASHINGTON",
+    "OREGON",
+    "PENNSYLVANIA",
+    "NEW YORK"
+]
+
+
+def state_keyboard(page="MEXICO", filter_text=None):
+
+    if page == "MEXICO":
+        states = STATE_LIST[:20]
+    else:
+        states = STATE_LIST[20:]
+
+    if filter_text:
+        states = [s for s in STATE_LIST if s.startswith(filter_text)]
+
+    rows = []
+    row = []
+
+    for s in states:
+        row.append(KeyboardButton(s))
+
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+
+    if row:
+        rows.append(row)
+
+    rows.append([
+        KeyboardButton("🇲🇽 MEXICO"),
+        KeyboardButton("🇺🇸 USA")
+    ])
+
+    rows.append([KeyboardButton("🔙 BACK")])
+
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 def base_nav_keyboard():
     return ReplyKeyboardMarkup(
@@ -162,13 +249,21 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Always rebuild wizard fresh
     clear_user_session(context)
-    context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+    context.user_data["account_state"] = ACCOUNT_LOCATION
     context.user_data["account_draft"] = {"type": "WORKER"}
     context.user_data["cached_role"] = "REGISTERING"
 
+    keyboard = ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("📍 SEND LOCATION", request_location=True)],
+            [KeyboardButton("🔙 CANCEL")]
+        ],
+        resize_keyboard=True
+    )
+
     await update.message.reply_text(
-        "Welcome 👋\nEnter your full name:",
-        reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 CANCEL")]], resize_keyboard=True)
+        "Welcome 👋\nFirst send the yard location:",
+        reply_markup=keyboard
     )
     return
 
@@ -263,7 +358,10 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if text == "👤 OWNER":
                 context.user_data["account_state"] = ACCOUNT_OWNER_NAME
-                context.user_data["account_draft"] = {"type": "OWNER"}
+                context.user_data["account_draft"] = {
+                    "type": "OWNER",
+                    "distance_warning": ""
+                }
 
                 await update.message.reply_text(
                     "Enter owner name:",
@@ -323,9 +421,10 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             context.user_data["account_draft"]["phone"] = text
-            context.user_data["account_state"] = ACCOUNT_OWNER_STATE
+            context.user_data["account_state"] = ACCOUNT_OWNER_CITY
+
             await update.message.reply_text(
-                "Enter state:",
+                "Enter city (optional):",
                 reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
             )
             return
@@ -333,10 +432,40 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if state == ACCOUNT_OWNER_STATE:
 
             if text == "🔙 BACK":
-                context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
+                context.user_data["account_state"] = ACCOUNT_OWNER_CITY
                 await update.message.reply_text(
-                    "Enter phone number:",
+                    "Enter city:",
                     reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
+                return
+
+            if text == "🇲🇽 MEXICO":
+                await update.message.reply_text(
+                    "Select state:",
+                    reply_markup=state_keyboard("MEXICO")
+                )
+                return
+
+            if text == "🇺🇸 USA":
+                await update.message.reply_text(
+                    "Select state:",
+                    reply_markup=state_keyboard("USA")
+                )
+                return
+
+            matches = [s for s in STATE_LIST if s.startswith(text)]
+
+            if len(matches) > 1:
+                await update.message.reply_text(
+                    "Select state:",
+                    reply_markup=state_keyboard(filter_text=text)
+                )
+                return
+
+            if text not in STATE_LIST:
+                await update.message.reply_text(
+                    "Please select a state from the list or type the first letters.",
+                    reply_markup=state_keyboard()
                 )
                 return
 
@@ -350,8 +479,28 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Type: {draft['type']}\n"
                 f"Name: {draft['name']}\n"
                 f"Phone: {draft['phone']}\n"
-                f"State: {draft.get('state','')}",
+                f"City/State: {draft.get('city','') + ', ' if draft.get('city') else ''}{draft.get('state','')}",
                 reply_markup=confirm_keyboard()
+            )
+            return
+
+        # --- OWNER CITY ---
+        if state == ACCOUNT_OWNER_CITY:
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
+                await update.message.reply_text(
+                    "Enter phone number:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
+                return
+
+            context.user_data["account_draft"]["city"] = text
+            context.user_data["account_state"] = ACCOUNT_OWNER_STATE
+
+            await update.message.reply_text(
+                "Select state:",
+                reply_markup=state_keyboard()
             )
             return
 
@@ -375,24 +524,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 draft = context.user_data["account_draft"]
 
-                # Step 1: No location yet → go to location
-                if "maps_link" not in draft:
-                    context.user_data["account_state"] = ACCOUNT_LOCATION
-
-                    keyboard = ReplyKeyboardMarkup(
-                        [[KeyboardButton("📍 SEND LOCATION", request_location=True)],
-                         [KeyboardButton("🔙 BACK")]],
-                        resize_keyboard=True
-                    )
-
-                    await update.message.reply_text(
-                        "Send the yard location pin:",
-                        reply_markup=keyboard
-                    )
-                    return
-
-                # Step 2: No photo yet → go to photo
+                # Step 1: Ensure photo exists
                 if "photo_file_id" not in draft:
+
                     context.user_data["account_state"] = ACCOUNT_PHOTO
 
                     await update.message.reply_text(
@@ -420,18 +554,20 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 try:
                     if ENABLE_SHEETS:
-                        await run_sheet(
+                        submission_id = await run_sheet(
                             context,
-                            create_owner,
-                            draft["type"],
-                            draft["name"],
-                            draft["phone"],
-                            draft.get("city",""),
-                            draft.get("state",""),
-                            "",
+                            create_owner_submission,
+                            uid,
+                            draft.get("coords",""),
                             draft.get("maps_link",""),
                             draft.get("photo_url",""),
-                            uid
+                            draft.get("name",""),
+                            draft.get("phone",""),
+                            draft.get("email",""),
+                            f"{draft.get('city','')}, {draft.get('state','')}".strip(", "),
+                            draft.get("source_platform",""),
+                            draft.get("source_link",""),
+                            draft.get("distance_warning","")
                         )
                     else:
                         print("TEST MODE — OWNER WOULD BE SAVED:", draft)
@@ -445,6 +581,58 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     unlock_user(context, ACCOUNT_CONFIRM)
 
                 if save_success:
+
+                    # ===== PUSH SUBMISSION TO ADMINS =====
+                    try:
+
+                        caption = (
+                            "🚨 NEW OWNER SUBMISSION\n\n"
+                            f"Name: {draft.get('name','')}\n"
+                            f"Phone: {draft.get('phone','')}\n"
+                            f"City: {draft.get('city','')}\n"
+                            f"State: {draft.get('state','')}\n"
+                            f"Finder ID: {uid}"
+                        )
+
+                        keyboard = InlineKeyboardMarkup([
+                            [
+                                InlineKeyboardButton("✅ APPROVE", callback_data=f"OWNER_APPROVE|{submission_id}"),
+                                InlineKeyboardButton("❌ REJECT", callback_data=f"OWNER_REJECT|{submission_id}")
+                            ],
+                            [
+                                InlineKeyboardButton("⏳ POSTPONE", callback_data=f"OWNER_POSTPONE|{submission_id}")
+                            ]
+                        ])
+
+                        for admin in ADMIN_IDS:
+
+                            if draft.get("photo_file_id"):
+
+                                await context.bot.send_photo(
+                                    chat_id=admin,
+                                    photo=draft["photo_file_id"],
+                                    caption=caption,
+                                    reply_markup=keyboard
+                                )
+
+                                if draft.get("existing_photo"):
+                                    await context.bot.send_photo(
+                                        chat_id=admin,
+                                        photo=draft["existing_photo"],
+                                        caption="Possible existing yard for comparison"
+                                    )
+
+                            else:
+                                await context.bot.send_message(
+                                    chat_id=admin,
+                                    text=caption,
+                                    reply_markup=keyboard
+                                )
+
+                    except Exception as e:
+                        log_block("ADMIN PUSH ERROR")
+                        log_line("ERROR", repr(e))
+
                     await update.message.reply_text(
                         "✅ Account created successfully.",
                         reply_markup=base_nav_keyboard()
@@ -513,7 +701,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Type: {draft['type']}\n"
                     f"Name: {draft['name']}\n"
                     f"Phone: {draft['phone']}\n"
-                    f"State: {draft.get('state','')}",
+                    f"City/State: {draft.get('city','') + ', ' if draft.get('city') else ''}{draft.get('state','')}",
                     reply_markup=confirm_keyboard()
                 )
                 return
@@ -552,7 +740,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Type: {draft['type']}\n"
                 f"Name: {draft['name']}\n"
                 f"Phone: {draft['phone']}\n"
-                f"State: {draft.get('state','')}",
+                f"City/State: {draft.get('city','') + ', ' if draft.get('city') else ''}{draft.get('state','')}",
                 reply_markup=confirm_keyboard()
             )
             return
@@ -580,7 +768,53 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 log_line("MAPS_LINK", maps_link)
 
                 draft["maps_link"] = maps_link
-                draft["city_state"] = draft.get("state", "")
+                draft["coords"] = f"{loc.latitude},{loc.longitude}"
+                draft["lat"] = loc.latitude
+                draft["lon"] = loc.longitude
+
+                # ===== CHECK FOR NEARBY YARDS =====
+                try:
+                    nearby = await run_sheet(
+                        context,
+                        check_nearby_accounts,
+                        loc.latitude,
+                        loc.longitude
+                    )
+
+                    if nearby:
+                        nearest = nearby[0]
+                        owner_row, dist = nearest
+
+                        warning = f"WITHIN_{int(dist)}M_OF_{owner_row[0]}"
+                        draft["distance_warning"] = warning
+
+                        log_block("NEARBY OWNER DETECTED")
+                        log_line("DISTANCE_METERS", int(dist))
+                        log_line("OWNER_ID", owner_row[0])
+
+                        draft["duplicate_message"] = (
+                            f"⚠ Possible duplicate yard\n"
+                            f"Distance: {int(dist)} meters\n"
+                            f"Owner ID: {owner_row[0]}"
+                        )
+
+                        try:
+                            existing_photo = owner_row[5]
+
+                            if existing_photo:
+                                draft["existing_photo"] = existing_photo
+
+                                await update.message.reply_photo(
+                                    existing_photo,
+                                    caption="Existing yard photo for comparison"
+                                )
+
+                        except Exception as e:
+                            log_block("EXISTING PHOTO ERROR")
+                            log_line("ERROR", repr(e))
+                except Exception as e:
+                    log_block("DISTANCE CHECK ERROR")
+                    log_line("ERROR", repr(e))
 
                 context.user_data["account_state"] = ACCOUNT_PHOTO
 
@@ -629,21 +863,72 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 log_line("FILE_PATH", draft["photo_url"])
 
-                context.user_data["account_state"] = ACCOUNT_CONFIRM
+                context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
 
-                await update.message.reply_text(
-                    f"Review account:\n"
-                    f"Type: {draft['type']}\n"
-                    f"Name: {draft['name']}\n"
-                    f"Phone: {draft['phone']}\n"
-                    f"State: {draft.get('state','')}\n"
-                    f"Location: ✅\n"
-                    f"Photo: ✅",
-                    reply_markup=confirm_keyboard()
-                )
+                if draft.get("distance_warning"):
+
+                    keyboard = ReplyKeyboardMarkup(
+                        [
+                            [KeyboardButton("➡ CONTINUE")],
+                            [KeyboardButton("❌ CANCEL")]
+                        ],
+                        resize_keyboard=True
+                    )
+
+                    message = "Location captured ✅\nPhoto captured ✅\n\n"
+
+                    if draft.get("duplicate_message"):
+                        message += draft["duplicate_message"] + "\n\nContinue anyway?"
+                    else:
+                        message += "Continue to owner details?"
+
+                    await update.message.reply_text(
+                        message,
+                        reply_markup=keyboard
+                    )
+
+                else:
+
+                    keyboard = ReplyKeyboardMarkup(
+                        [
+                            [KeyboardButton("➡ CONTINUE")],
+                            [KeyboardButton("❌ CANCEL")]
+                        ],
+                        resize_keyboard=True
+                    )
+
+                    await update.message.reply_text(
+                        "Location and photo captured.\n\n"
+                        "Continue to owner details?",
+                        reply_markup=keyboard
+                    )
+
                 return
 
             await update.message.reply_text("Please send a photo.")
+            return
+
+        # ================= DUPLICATE CHECK =================
+        if state == ACCOUNT_DUPLICATE_CHECK:
+
+            if "CANCEL" in text:
+                clear_user_session(context)
+                await open_menu_for_role(update, context, role)
+                return
+
+            if "CONTINUE" in text:
+
+                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+
+                await update.message.reply_text(
+                    "Enter owner name:",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [[KeyboardButton("🔙 BACK")]],
+                        resize_keyboard=True
+                    )
+                )
+                return
+
             return
 
     # ================= ACCOUNTS (ADMIN + WORKERS) =================
@@ -658,8 +943,18 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ================= ADD ACCOUNT =================
     if text == "➕ ADD ACCOUNT" and status == "ACTIVE":
 
-        context.user_data["account_state"] = ACCOUNT_TYPE
-        context.user_data["account_draft"] = {}
+        context.user_data["account_state"] = ACCOUNT_LOCATION
+        context.user_data["account_draft"] = {
+            "email": "",
+            "city": "",
+            "state": "",
+            "source_platform": "",
+            "source_link": "",
+            "distance_warning": "",
+            "coords": "",
+            "maps_link": "",
+            "photo_url": ""
+        }
 
         keyboard = ReplyKeyboardMarkup(
             [
@@ -741,7 +1036,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚙️ SYSTEM panel opened")
             return
 
-async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     query = update.callback_query
     await query.answer()
 
@@ -752,9 +1048,45 @@ async def approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     action = parts[0]
-    target_id = parts[1]
+    submission_id = parts[1]
+
+    if action == "OWNER_APPROVE":
+
+        try:
+            if ENABLE_SHEETS:
+                owner_id = await run_sheet(
+                    context,
+                    approve_owner_submission,
+                    submission_id
+                )
+
+                if not owner_id:
+                    await query.edit_message_text(
+                        f"⚠️ Submission {submission_id} already processed."
+                    )
+                    return
+
+        except Exception as e:
+            log_block("OWNER APPROVE ERROR")
+            log_line("ERROR", repr(e))
+
+        await query.edit_message_text(
+            f"✅ Owner submission {submission_id} approved and moved to OWNERS"
+        )
+
+    elif action == "OWNER_REJECT":
+
+        await query.edit_message_text(
+            f"❌ Owner submission {submission_id} rejected"
+        )
+
+    elif action == "OWNER_POSTPONE":
+
+        await query.edit_message_text(
+            f"⏳ Owner submission {submission_id} postponed"
+        )
+
     admin_id = str(query.from_user.id)
-    from config import ADMIN_IDS
 
     # 🚫 Only admins can approve users
     if admin_id not in ADMIN_IDS:
@@ -811,7 +1143,7 @@ app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(MessageHandler(filters.ALL, debug_all), group=-1)
 
-app.add_handler(CallbackQueryHandler(approval_callback))
+app.add_handler(CallbackQueryHandler(owner_review_callback, pattern="OWNER_"))
 
 # LOCATION MUST COME FIRST
 # START must always work first

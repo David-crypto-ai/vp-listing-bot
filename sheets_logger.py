@@ -2,6 +2,7 @@ import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timezone, timedelta
+import math
 
 from config import (
     SPREADSHEET_ID, GOOGLE_CREDENTIALS,
@@ -203,6 +204,49 @@ def log_action(user_id: str, role: str, action: str, item_id="", owner_id="", de
     ])
 
 # ---------------- OWNERS ----------------
+# ---------------- DISTANCE CHECK ----------------
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    R = 6371000
+
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+
+    a = math.sin(dphi/2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2
+
+    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+
+def check_nearby_accounts(lat, lon, radius=120):
+    ws = owners_ws()
+    rows = ws.get_all_values()[1:]
+
+    matches = []
+
+    for r in rows:
+
+        if len(r) < 17:
+            continue
+
+        coords = r[16]
+
+        if not coords:
+            continue
+
+        try:
+            lat2, lon2 = map(float, coords.split(","))
+        except:
+            continue
+
+        dist = haversine_distance(lat, lon, lat2, lon2)
+
+        if dist <= radius:
+            matches.append((r, int(dist)))
+
+    return matches
 
 def next_owner_id():
     ws = owners_ws()
@@ -221,27 +265,67 @@ def find_owner_matches(query: str, limit=10):
             out.append(r)
     return out[:limit]
 
-def create_owner(owner_type, name, phone, city_state, source_platform, source_link, maps_link, location_photo_url, claimed_by):
-    ws = owners_ws()
-    owner_id = next_owner_id()
-    ws.append_row([
-        owner_id,
-        owner_type,
-        name,
-        phone,
+def create_owner_submission(
+        submitted_by,
+        coords,
+        maps_link,
+        photo_url,
+        owner_name,
+        owner_phone,
+        owner_email,
         city_state,
         source_platform,
         source_link,
-        maps_link,
-        location_photo_url,
-        str(claimed_by),
-        "PENDING",      # gatekeeper/admin approves
-        "",
+        distance_warning):
+
+    ss = _client().open_by_key(SPREADSHEET_ID)
+
+    try:
+        ws = ss.worksheet("OWNER_SUBMISSIONS")
+    except Exception:
+        ws = ss.add_worksheet(title="OWNER_SUBMISSIONS", rows="5000", cols="20")
+
+        ws.append_row([
+            "SUBMISSION_ID",
+            "SUBMITTED_BY",
+            "SUBMITTED_AT",
+            "LOCATION_COORDS",
+            "MAPS_LINK",
+            "PHOTO_URL",
+            "OWNER_NAME",
+            "OWNER_PHONE",
+            "OWNER_EMAIL",
+            "CITY_STATE",
+            "SOURCE_PLATFORM",
+            "SOURCE_LINK",
+            "ADMIN_STATUS",
+            "ADMIN_NOTES",
+            "DISTANCE_WARNING"
+        ])
+
+    rows = ws.get_all_values()
+
+    submission_id = f"SUB-{len(rows):06d}"
+
+    ws.append_row([
+        submission_id,
+        str(submitted_by),
         now_str(),
+        coords,
+        maps_link,
+        photo_url,
+        owner_name,
+        owner_phone,
+        owner_email,
+        city_state,
+        source_platform,
+        source_link,
+        "PENDING",
         "",
-        ""
+        distance_warning
     ])
-    return owner_id
+
+    return submission_id
 
 def approve_owner(owner_id: str, approved_by: str):
     ws = owners_ws()
@@ -435,3 +519,52 @@ def set_task_last_reminder(task_id: str):
             ws.update_cell(i, idx["LAST_REMINDER_SENT_AT"], now_str())
             return True
     return False
+
+def approve_owner_submission(submission_id):
+
+    ss = _client().open_by_key(SPREADSHEET_ID)
+    ws = ss.worksheet("OWNER_SUBMISSIONS")
+
+    rows = ws.get_all_values()
+
+    for i, r in enumerate(rows[1:], start=2):
+
+        if r[0] == submission_id:
+
+            # ===== SAFETY LOCK =====
+            status = r[12]
+
+            if status != "PENDING":
+                return None
+
+            # mark processing immediately
+            ws.update_cell(i, 13, "PROCESSING")
+
+            owner_id = next_owner_id()
+
+            owners = owners_ws()
+
+            owners.append_row([
+                owner_id,
+                "Truck Owner",
+                r[6],
+                r[7],
+                r[8],
+                r[9],
+                r[10],
+                r[11],
+                r[4],
+                r[5],
+                r[1],
+                "APPROVED",
+                "",
+                now_str(),
+                "",
+                "",
+                r[3]
+            ])
+
+            # finalize status
+            ws.update_cell(i, 13, "APPROVED")
+
+            return owner_id
