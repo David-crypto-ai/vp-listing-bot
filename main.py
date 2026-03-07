@@ -10,7 +10,7 @@ from telegram.ext import (
     filters
 )
 
-from sheets_logger import create_owner_submission, check_nearby_accounts, approve_owner_submission
+from sheets_logger import create_owner_submission, check_nearby_accounts, approve_owner_submission, get_pending_owner_submissions
 from config import ADMIN_IDS
 from menus import (
     open_menu_for_role,
@@ -35,6 +35,8 @@ ENABLE_SHEETS = True  # Set to True when going live
 ROLE_CACHE = {}
 ADMIN_CACHE = set()
 SEEN_USERS = set()
+
+POSTPONED_OWNER_SUBMISSIONS = {}
 
 async def get_cached_role(context, user_id):
     if user_id in ROLE_CACHE:
@@ -434,7 +436,13 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await update.message.reply_text(
                 "Enter city (optional):",
-                reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                reply_markup=ReplyKeyboardMarkup(
+                    [
+                        [KeyboardButton("➡ NEXT")],
+                        [KeyboardButton("🔙 BACK")]
+                    ],
+                    resize_keyboard=True
+                )
             )
             return
 
@@ -501,6 +509,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "Enter phone number:",
                     reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
+                return
+
+            if text == "➡ NEXT":
+                context.user_data["account_state"] = ACCOUNT_OWNER_STATE
+
+                await update.message.reply_text(
+                    "Select state:",
+                    reply_markup=state_keyboard()
                 )
                 return
 
@@ -614,6 +631,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ])
 
                         for admin in ADMIN_IDS:
+
+                            if str(admin) == str(uid):
+                                continue
 
                             if draft.get("photo_file_id"):
 
@@ -808,7 +828,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
 
                         try:
-                            existing_photo = owner_row[5]
+                            existing_photo = owner_row[9]
 
                             if existing_photo:
                                 draft["existing_photo"] = existing_photo
@@ -1009,7 +1029,56 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     # ================= ADMIN PANEL NAVIGATION =================
     if role == "ADMIN":
+        if text == "⏳ PENDING OWNERS":
 
+            try:
+                rows = await run_sheet(
+                    context,
+                    get_pending_owner_submissions
+                )
+
+                if not rows:
+                    await update.message.reply_text("No pending owner submissions.")
+                    return
+
+                for r in rows:
+
+                    submission_id = r[0]
+                    photo = r[5]
+
+                    caption = (
+                        f"⏳ Pending Owner Submission\n\n"
+                        f"ID: {submission_id}\n"
+                        f"Name: {r[6]}\n"
+                        f"Phone: {r[7]}\n"
+                        f"City: {r[9]}"
+                    )
+
+                    keyboard = InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton("✅ APPROVE", callback_data=f"OWNER_APPROVE|{submission_id}"),
+                            InlineKeyboardButton("❌ REJECT", callback_data=f"OWNER_REJECT|{submission_id}")
+                        ]
+                    ])
+
+                    if photo:
+                        await context.bot.send_photo(
+                            chat_id=update.effective_chat.id,
+                            photo=photo,
+                            caption=caption,
+                            reply_markup=keyboard
+                        )
+                    else:
+                        await update.message.reply_text(
+                            caption,
+                            reply_markup=keyboard
+                        )
+
+            except Exception as e:
+                log_block("PENDING LOAD ERROR")
+                log_line("ERROR", repr(e))
+
+            return
         if text == PANEL_BACK:
             await open_menu_for_role(update, context, role)
             return
@@ -1026,7 +1095,33 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if text == PANEL_WORKFLOW:
-            await update.message.reply_text("🔄 WORKFLOW panel opened")
+
+            if not POSTPONED_OWNER_SUBMISSIONS:
+                await update.message.reply_text("No postponed owner submissions.")
+                return
+
+            for sid, data in POSTPONED_OWNER_SUBMISSIONS.items():
+
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("✅ APPROVE", callback_data=f"OWNER_APPROVE|{sid}"),
+                        InlineKeyboardButton("❌ REJECT", callback_data=f"OWNER_REJECT|{sid}")
+                    ]
+                ])
+
+                if data["photo"]:
+                    await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=data["photo"],
+                        caption=f"⏳ Postponed Submission {sid}",
+                        reply_markup=keyboard
+                    )
+                else:
+                    await update.message.reply_text(
+                        f"⏳ Postponed Submission {sid}",
+                        reply_markup=keyboard
+                    )
+
             return
 
         if text == PANEL_USERS:
@@ -1079,20 +1174,23 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
             log_block("OWNER APPROVE ERROR")
             log_line("ERROR", repr(e))
 
-        await query.edit_message_text(
-            f"✅ Owner submission {submission_id} approved and moved to OWNERS"
-        )
+        await query.delete_message()
 
     elif action == "OWNER_REJECT":
 
-        await query.edit_message_text(
-            f"❌ Owner submission {submission_id} rejected"
-        )
+        await query.delete_message()
 
     elif action == "OWNER_POSTPONE":
 
-        await query.edit_message_text(
-            f"⏳ Owner submission {submission_id} postponed"
+        POSTPONED_OWNER_SUBMISSIONS[submission_id] = {
+            "message": query.message.text,
+            "photo": query.message.photo[-1].file_id if query.message.photo else None
+        }
+
+        await query.edit_message_reply_markup(reply_markup=None)
+
+        await query.message.reply_text(
+            f"⏳ Submission {submission_id} postponed.\nYou can review it later in WORKFLOW."
         )
 
     admin_id = str(query.from_user.id)

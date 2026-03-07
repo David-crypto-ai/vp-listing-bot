@@ -4,6 +4,7 @@ from telegram import ReplyKeyboardMarkup, KeyboardButton
 PANEL_ITEMS = "📦 ITEMS"
 PANEL_ACCOUNTS = "🏢 ACCOUNTS"
 PANEL_WORKFLOW = "🔄 WORKFLOW"
+BTN_PENDING_OWNERS = "⏳ PENDING OWNERS"
 PANEL_USERS = "👥 USERS"
 PANEL_TASKS = "📝 TASKS"
 PANEL_REPORTS = "📊 REPORTS PANEL"
@@ -78,12 +79,12 @@ def accounts_menu():
 def admin_main_menu():
     return kb([
         [PANEL_ITEMS, PANEL_ACCOUNTS],
-        [PANEL_WORKFLOW, PANEL_USERS],
-        [PANEL_TASKS, PANEL_REPORTS],
+        [PANEL_WORKFLOW, BTN_PENDING_OWNERS],
+        [PANEL_USERS, PANEL_TASKS],
+        [PANEL_REPORTS],
         [PANEL_SYSTEM],
         [PANEL_BACK]
     ])
-
 
 # =============================
 # ROLE MENUS

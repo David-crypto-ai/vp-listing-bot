@@ -568,3 +568,18 @@ def approve_owner_submission(submission_id):
             ws.update_cell(i, 13, "APPROVED")
 
             return owner_id
+
+def get_pending_owner_submissions():
+
+    ss = _client().open_by_key(SPREADSHEET_ID)
+    ws = ss.worksheet("OWNER_SUBMISSIONS")
+
+    rows = ws.get_all_values()[1:]
+
+    pending = []
+
+    for r in rows:
+        if len(r) > 12 and r[12] == "PENDING":
+            pending.append(r)
+
+    return pending
