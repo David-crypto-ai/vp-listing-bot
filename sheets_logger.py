@@ -388,7 +388,7 @@ def owners_recent_for_user(user_id: str, limit=10):
     rows = ws.get_all_values()[1:]
     out = []
     for r in reversed(rows):
-        if len(r) > 9 and r[9] == str(user_id):
+        if len(r) > 10 and r[10] == str(user_id):
             out.append(r)
         if len(out) >= limit:
             break
@@ -596,7 +596,7 @@ def approve_owner_submission(submission_id):
                 r[5],   # store TELEGRAM file_id (used later to resend photo)
                 r[1],
                 "APPROVED",
-                "",
+                "ADMIN",   # APPROVED_BY
                 now_str(),
                 "",
                 "",
@@ -622,3 +622,24 @@ def get_pending_owner_submissions():
             pending.append(r)
 
     return pending
+
+def reject_owner_submission(submission_id):
+
+    ss = _client().open_by_key(SPREADSHEET_ID)
+    ws = ss.worksheet("OWNER_SUBMISSIONS")
+
+    rows = ws.get_all_values()
+
+    for i, r in enumerate(rows[1:], start=2):
+
+        if r[0] == submission_id:
+
+            status = r[12]
+
+            if status != "PENDING":
+                return False
+
+            ws.update_cell(i, 13, "REJECTED")
+            return True
+
+    return False

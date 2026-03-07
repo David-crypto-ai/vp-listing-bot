@@ -14,6 +14,7 @@ from sheets_logger import (
     create_owner_submission,
     check_nearby_accounts,
     approve_owner_submission,
+    reject_owner_submission,
     get_pending_owner_submissions,
     create_owner_direct
 )
@@ -651,18 +652,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"Finder ID: {uid}"
                         )
 
-                        if submission_id:
-                            keyboard = InlineKeyboardMarkup([
-                                [
-                                    InlineKeyboardButton("✅ APPROVE", callback_data=f"OWNER_APPROVE|{submission_id}"),
-                                    InlineKeyboardButton("❌ REJECT", callback_data=f"OWNER_REJECT|{submission_id}")
-                                ],
-                                [
-                                    InlineKeyboardButton("⏳ POSTPONE", callback_data=f"OWNER_POSTPONE|{submission_id}")
-                                ]
-                            ])
-                        else:
-                            keyboard = None
+                        keyboard = None
 
                         for admin in ADMIN_IDS:
 
@@ -850,12 +840,18 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # ===== CHECK FOR NEARBY YARDS =====
                 try:
-                    nearby = await run_sheet(
-                        context,
-                        check_nearby_accounts,
-                        loc.latitude,
-                        loc.longitude
-                    )
+
+                    # prevent duplicate check from running twice
+                    if draft.get("duplicate_checked"):
+                        nearby = []
+                    else:
+                        nearby = await run_sheet(
+                            context,
+                            check_nearby_accounts,
+                            loc.latitude,
+                            loc.longitude
+                        )
+                        draft["duplicate_checked"] = True
 
                     log_block("NEARBY SEARCH RESULT")
                     log_line("NEARBY_ROWS", nearby)
@@ -979,15 +975,29 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 if draft.get("duplicate_confirmed"):
 
-                    context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+                    if not draft.get("name"):
+                        context.user_data["account_state"] = ACCOUNT_OWNER_NAME
 
-                    await update.message.reply_text(
-                        "Enter owner name:",
-                        reply_markup=ReplyKeyboardMarkup(
-                            [[KeyboardButton("🔙 BACK")]],
-                            resize_keyboard=True
+                        await update.message.reply_text(
+                            "Enter owner name:",
+                            reply_markup=ReplyKeyboardMarkup(
+                                [[KeyboardButton("🔙 BACK")]],
+                                resize_keyboard=True
+                            )
                         )
-                    )
+                    else:
+                        context.user_data["account_state"] = ACCOUNT_CONFIRM
+
+                        draft = context.user_data["account_draft"]
+
+                        await update.message.reply_text(
+                            f"Review account:\n"
+                            f"Type: {draft['type']}\n"
+                            f"Name: {draft['name']}\n"
+                            f"Phone: {draft['phone']}\n"
+                            f"City/State: {draft.get('city','') + ', ' if draft.get('city') else ''}{draft.get('state','')}",
+                            reply_markup=confirm_keyboard()
+                        )
                     return
 
                 if draft.get("distance_warning"):
@@ -1051,6 +1061,21 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 draft = context.user_data.setdefault("account_draft", {})
                 draft["duplicate_confirmed"] = True
 
+                # if photo not yet sent → ask for photo
+                if not draft.get("photo_file_id"):
+
+                    context.user_data["account_state"] = ACCOUNT_PHOTO
+
+                    await update.message.reply_text(
+                        "📸 Now send a yard photo:",
+                        reply_markup=ReplyKeyboardMarkup(
+                            [[KeyboardButton("🔙 BACK")]],
+                            resize_keyboard=True
+                        )
+                    )
+                    return
+
+                # photo already exists → move forward
                 context.user_data["account_state"] = ACCOUNT_OWNER_NAME
 
                 await update.message.reply_text(
@@ -1145,6 +1170,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("No pending owner submissions.")
                     return
 
+                await update.message.reply_text("📋 Pending Owner Submissions")
+
                 for r in rows:
 
                     submission_id = r[0]
@@ -1158,10 +1185,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"City: {r[9]}"
                     )
 
+                    worker_id = r[1]
+
                     keyboard = InlineKeyboardMarkup([
                         [
-                            InlineKeyboardButton("✅ APPROVE", callback_data=f"OWNER_APPROVE|{submission_id}"),
-                            InlineKeyboardButton("❌ REJECT", callback_data=f"OWNER_REJECT|{submission_id}")
+                            InlineKeyboardButton("✅ APPROVE", callback_data=f"OWNER_APPROVE|{submission_id}|{worker_id}"),
+                            InlineKeyboardButton("❌ REJECT", callback_data=f"OWNER_REJECT|{submission_id}|{worker_id}")
                         ]
                     ])
 
@@ -1247,10 +1276,17 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
-    data = query.data or ""
+
+    if not query:
+        return
+
+    data = query.data
+
+    if not data:
+        return
 
     parts = data.split("|")
-    action = parts[0] if parts else ""
+    action = parts[0]
 
     if action.startswith("OWNER_"):
         await owner_review_callback(update, context)
@@ -1265,15 +1301,16 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
     data = query.data
     parts = data.split("|")
 
-    if len(parts) < 2:
+    if len(parts) < 3:
         return
 
     action = parts[0]
     submission_id = parts[1]
+    worker_id = parts[2]
 
     admin_id = str(query.from_user.id)
 
-    if admin_id not in ADMIN_IDS:
+    if str(admin_id) not in [str(a) for a in ADMIN_IDS]:
         await query.answer("⛔ Admin only", show_alert=True)
         return
 
@@ -1285,10 +1322,21 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
             if ENABLE_SHEETS:
 
                 rows = await run_sheet(context, get_pending_owner_submissions)
+
+                submission_found = False
+
                 for r in rows:
                     if r[0] == submission_id:
                         worker_id = r[1]
+                        submission_found = True
                         break
+
+                # submission already processed by another admin
+                if not submission_found:
+                    await query.edit_message_text(
+                        f"⚠️ Submission {submission_id} already processed."
+                    )
+                    return
 
                 owner_id = await run_sheet(
                     context,
@@ -1313,7 +1361,7 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
             if worker_id:
                 await context.bot.send_message(
                     chat_id=worker_id,
-                    text="✅ Your submitted yard has been approved."
+                    text=f"✅ Your submitted yard has been approved.\nOwner ID: {owner_id}"
                 )
         except Exception as e:
             log_block("WORKER APPROVAL NOTIFY ERROR")
@@ -1324,13 +1372,16 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
         worker_id = None
 
         try:
-            rows = await run_sheet(context, get_pending_owner_submissions)
-            for r in rows:
-                if r[0] == submission_id:
-                    worker_id = r[1]
-                    break
-        except:
-            pass
+            if ENABLE_SHEETS:
+                await run_sheet(
+                    context,
+                    reject_owner_submission,
+                    submission_id
+                )
+
+        except Exception as e:
+            log_block("OWNER REJECT ERROR")
+            log_line("ERROR", repr(e))
 
         await query.delete_message()
 
@@ -1364,8 +1415,6 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
 app = ApplicationBuilder().token(TOKEN).build()
 
 DEBUG_MODE = True
-
-filters.TEXT
 
 app.add_handler(CallbackQueryHandler(callback_router))
 
