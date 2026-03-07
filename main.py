@@ -645,11 +645,18 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 )
 
                                 if draft.get("existing_photo"):
+
                                     await context.bot.send_photo(
                                         chat_id=admin,
                                         photo=draft["existing_photo"],
-                                        caption="Possible existing yard for comparison"
+                                        caption="Existing yard for comparison"
                                     )
+
+                                await context.bot.send_location(
+                                    chat_id=admin,
+                                    latitude=draft.get("lat"),
+                                    longitude=draft.get("lon")
+                                )
 
                             else:
                                 await context.bot.send_message(
@@ -831,10 +838,17 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             existing_photo = owner_row[9]
 
                             if existing_photo:
+
                                 draft["existing_photo"] = existing_photo
 
+                                await update.message.reply_text(
+                                    "⚠ Possible duplicate yard detected.\n"
+                                    f"Distance: {int(dist)} meters\n"
+                                    f"Owner ID: {owner_row[0]}"
+                                )
+
                                 await update.message.reply_photo(
-                                    existing_photo,
+                                    photo=existing_photo,
                                     caption="Existing yard photo for comparison"
                                 )
 
