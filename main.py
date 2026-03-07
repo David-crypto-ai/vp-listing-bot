@@ -357,15 +357,24 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if state == ACCOUNT_TYPE:
 
             if text == "👤 OWNER":
-                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+
+                context.user_data["account_state"] = ACCOUNT_LOCATION
                 context.user_data["account_draft"] = {
                     "type": "OWNER",
                     "distance_warning": ""
                 }
 
+                keyboard = ReplyKeyboardMarkup(
+                    [
+                        [KeyboardButton("📍 SEND LOCATION", request_location=True)],
+                        [KeyboardButton("🔙 BACK")]
+                    ],
+                    resize_keyboard=True
+                )
+
                 await update.message.reply_text(
-                    "Enter owner name:",
-                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                    "Please send the yard location using the button:",
+                    reply_markup=keyboard
                 )
                 return
 
@@ -943,7 +952,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ================= ADD ACCOUNT =================
     if text == "➕ ADD ACCOUNT" and status == "ACTIVE":
 
-        context.user_data["account_state"] = ACCOUNT_LOCATION
+        context.user_data["account_state"] = ACCOUNT_TYPE
         context.user_data["account_draft"] = {
             "email": "",
             "city": "",
