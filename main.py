@@ -10,7 +10,13 @@ from telegram.ext import (
     filters
 )
 
-from sheets_logger import create_owner_submission, check_nearby_accounts, approve_owner_submission, get_pending_owner_submissions
+from sheets_logger import (
+    create_owner_submission,
+    check_nearby_accounts,
+    approve_owner_submission,
+    get_pending_owner_submissions,
+    create_owner_direct
+)
 from config import ADMIN_IDS
 from menus import (
     open_menu_for_role,
@@ -580,21 +586,45 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 try:
                     if ENABLE_SHEETS:
-                        submission_id = await run_sheet(
-                            context,
-                            create_owner_submission,
-                            uid,
-                            draft.get("coords",""),
-                            draft.get("maps_link",""),
-                            draft.get("photo_url",""),
-                            draft.get("name",""),
-                            draft.get("phone",""),
-                            draft.get("email",""),
-                            f"{draft.get('city','')}, {draft.get('state','')}".strip(", "),
-                            draft.get("source_platform",""),
-                            draft.get("source_link",""),
-                            draft.get("distance_warning","")
-                        )
+
+                        # ADMIN → write directly to OWNERS_MASTER
+                        if uid in ADMIN_IDS:
+
+                            owner_id = await run_sheet(
+                                context,
+                                create_owner_direct,
+                                uid,
+                                draft.get("coords",""),
+                                draft.get("maps_link",""),
+                                draft.get("photo_url",""),
+                                draft.get("name",""),
+                                draft.get("phone",""),
+                                draft.get("email",""),
+                                f"{draft.get('city','')}, {draft.get('state','')}".strip(", "),
+                                draft.get("source_platform",""),
+                                draft.get("source_link","")
+                            )
+
+                            submission_id = None
+
+                        # WORKER → send to submission queue
+                        else:
+
+                            submission_id = await run_sheet(
+                                context,
+                                create_owner_submission,
+                                uid,
+                                draft.get("coords",""),
+                                draft.get("maps_link",""),
+                                draft.get("photo_url",""),
+                                draft.get("name",""),
+                                draft.get("phone",""),
+                                draft.get("email",""),
+                                f"{draft.get('city','')}, {draft.get('state','')}".strip(", "),
+                                draft.get("source_platform",""),
+                                draft.get("source_link",""),
+                                draft.get("distance_warning","")
+                            )
                     else:
                         print("TEST MODE — OWNER WOULD BE SAVED:", draft)
 

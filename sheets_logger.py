@@ -250,8 +250,8 @@ def check_nearby_accounts(lat, lon, radius=120):
 
 def next_owner_id():
     ws = owners_ws()
-    count = len(ws.get_all_values())  # includes header
-    return f"OWN-{count:06d}"
+    rows = ws.get_all_values()[1:]
+    return f"OWN-{len(rows)+1:06d}"
 
 def find_owner_matches(query: str, limit=10):
     q = safe_text(query).lower()
@@ -327,13 +327,51 @@ def create_owner_submission(
 
     return submission_id
 
+def create_owner_direct(
+        created_by,
+        coords,
+        maps_link,
+        photo_url,
+        owner_name,
+        owner_phone,
+        owner_email,
+        city_state,
+        source_platform,
+        source_link):
+
+    owners = owners_ws()
+
+    owner_id = next_owner_id()
+
+    owners.append_row([
+        owner_id,
+        "Truck Owner",
+        owner_name,
+        owner_phone,
+        owner_email,
+        city_state,
+        source_platform,
+        source_link,
+        maps_link,
+        photo_url,
+        created_by,
+        "APPROVED",
+        created_by,
+        now_str(),
+        "",
+        "",
+        coords
+    ])
+
+    return owner_id
+
 def approve_owner(owner_id: str, approved_by: str):
     ws = owners_ws()
     rows = ws.get_all_values()
     for i, r in enumerate(rows[1:], start=2):
         if r and r[0] == owner_id:
-            ws.update_cell(i, 11, "APPROVED")  # OWNER_STATUS
-            ws.update_cell(i, 12, str(approved_by))
+            ws.update_cell(i, 12, "APPROVED")  # OWNER_STATUS
+            ws.update_cell(i, 13, str(approved_by))
             return True
     return False
 
