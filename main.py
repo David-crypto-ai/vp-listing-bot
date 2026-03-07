@@ -868,7 +868,16 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
 
                         try:
-                            existing_photo = owner_row[9]
+                            log_block("DUPLICATE PHOTO DEBUG")
+                            log_line("OWNER_ROW", owner_row)
+                            log_line("ROW_LENGTH", len(owner_row))
+
+                            existing_photo = None
+
+                            if len(owner_row) >= 10:
+                                existing_photo = owner_row[9]
+
+                            log_line("EXISTING_PHOTO_CELL", existing_photo)
 
                             if existing_photo:
 
@@ -883,6 +892,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 await update.message.reply_photo(
                                     photo=existing_photo,
                                     caption="Existing yard photo for comparison"
+                                )
+
+                            else:
+
+                                await update.message.reply_text(
+                                    "⚠ Possible duplicate yard detected.\n"
+                                    f"Distance: {int(dist)} meters\n"
+                                    f"Owner ID: {owner_row[0]}\n"
+                                    "⚠ Existing yard photo not found."
                                 )
 
                         except Exception as e:
