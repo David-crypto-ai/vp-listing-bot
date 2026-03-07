@@ -581,7 +581,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 log_line("CITY", draft.get("city"))
                 log_line("STATE", draft.get("state"))
                 log_line("MAPS_LINK", draft.get("maps_link"))
-                log_line("PHOTO_URL", draft.get("photo_url"))
+                log_line("PHOTO_FILE_ID", draft.get("photo_file_id"))
                 log_line("UID", uid)
 
                 try:
@@ -596,7 +596,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 uid,
                                 draft.get("coords",""),
                                 draft.get("maps_link",""),
-                                draft.get("photo_url",""),
+                                draft.get("photo_file_id",""),
                                 draft.get("name",""),
                                 draft.get("phone",""),
                                 draft.get("email",""),
@@ -616,7 +616,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 uid,
                                 draft.get("coords",""),
                                 draft.get("maps_link",""),
-                                draft.get("photo_url",""),
+                                draft.get("photo_file_id",""),
                                 draft.get("name",""),
                                 draft.get("phone",""),
                                 draft.get("email",""),
@@ -879,15 +879,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                             log_line("EXISTING_PHOTO_CELL", existing_photo)
 
+                            await update.message.reply_text(
+                                "⚠ Possible duplicate yard detected.\n"
+                                f"Distance: {int(dist)} meters\n"
+                                f"Owner ID: {owner_row[0]}"
+                            )
+
                             if existing_photo:
 
                                 draft["existing_photo"] = existing_photo
-
-                                await update.message.reply_text(
-                                    "⚠ Possible duplicate yard detected.\n"
-                                    f"Distance: {int(dist)} meters\n"
-                                    f"Owner ID: {owner_row[0]}"
-                                )
 
                                 await update.message.reply_photo(
                                     photo=existing_photo,
@@ -895,13 +895,23 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 )
 
                             else:
-
                                 await update.message.reply_text(
-                                    "⚠ Possible duplicate yard detected.\n"
-                                    f"Distance: {int(dist)} meters\n"
-                                    f"Owner ID: {owner_row[0]}\n"
                                     "⚠ Existing yard photo not found."
                                 )
+
+                            context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
+
+                            await update.message.reply_text(
+                                "Compare the location in front of you with the saved yard photo.\n\nContinue anyway?",
+                                reply_markup=ReplyKeyboardMarkup(
+                                    [
+                                        [KeyboardButton("➡ CONTINUE")],
+                                        [KeyboardButton("❌ CANCEL")]
+                                    ],
+                                    resize_keyboard=True
+                                )
+                            )
+                            return
 
                         except Exception as e:
                             log_block("EXISTING PHOTO ERROR")
@@ -956,6 +966,19 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 draft["photo_url"] = file.file_path
 
                 log_line("FILE_PATH", draft["photo_url"])
+
+                if draft.get("duplicate_confirmed"):
+
+                    context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+
+                    await update.message.reply_text(
+                        "Enter owner name:",
+                        reply_markup=ReplyKeyboardMarkup(
+                            [[KeyboardButton("🔙 BACK")]],
+                            resize_keyboard=True
+                        )
+                    )
+                    return
 
                 context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
 
@@ -1012,10 +1035,11 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if "CONTINUE" in text:
 
-                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+                context.user_data.setdefault("account_draft", {})["duplicate_confirmed"] = True
+                context.user_data["account_state"] = ACCOUNT_PHOTO
 
                 await update.message.reply_text(
-                    "Enter owner name:",
+                    "📸 Now send a yard photo:",
                     reply_markup=ReplyKeyboardMarkup(
                         [[KeyboardButton("🔙 BACK")]],
                         resize_keyboard=True
