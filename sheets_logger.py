@@ -68,6 +68,7 @@ OWNERS_SCHEMA = [
     "OWNER_NAME",
     "OWNER_PHONE",
     "OWNER_EMAIL",
+    "OWNER_SOCIALS",
     "CITY_STATE",
     "SOURCE_PLATFORM",
     "SOURCE_LINK",
@@ -273,6 +274,7 @@ def create_owner_submission(
         owner_name,
         owner_phone,
         owner_email,
+        owner_socials,
         city_state,
         source_platform,
         source_link,
@@ -295,6 +297,7 @@ def create_owner_submission(
             "OWNER_NAME",
             "OWNER_PHONE",
             "OWNER_EMAIL",
+            "OWNER_SOCIALS",
             "CITY_STATE",
             "SOURCE_PLATFORM",
             "SOURCE_LINK",
@@ -317,6 +320,7 @@ def create_owner_submission(
         owner_name,
         owner_phone,
         owner_email,
+        owner_socials,
         city_state,
         source_platform,
         source_link,
@@ -335,6 +339,7 @@ def create_owner_direct(
         owner_name,
         owner_phone,
         owner_email,
+        owner_socials,
         city_state,
         source_platform,
         source_link):
@@ -349,6 +354,7 @@ def create_owner_direct(
         owner_name,
         owner_phone,
         owner_email,
+        owner_socials,
         city_state,
         source_platform,
         source_link,
@@ -570,7 +576,7 @@ def approve_owner_submission(submission_id):
         if r[0] == submission_id:
 
             # ===== SAFETY LOCK =====
-            status = r[12]
+            status = r[13]
 
             if status != "PENDING":
                 return None
@@ -592,11 +598,12 @@ def approve_owner_submission(submission_id):
                 r[9],
                 r[10],
                 r[11],
+                r[12],
                 r[4],
-                r[5],   # store TELEGRAM file_id (used later to resend photo)
+                r[5],   # store TELEGRAM file_id
                 r[1],
                 "APPROVED",
-                "ADMIN",   # APPROVED_BY
+                "ADMIN",
                 now_str(),
                 "",
                 "",
@@ -618,7 +625,7 @@ def get_pending_owner_submissions():
     pending = []
 
     for r in rows:
-        if len(r) > 12 and r[12] == "PENDING":
+        if len(r) > 13 and r[13] == "PENDING":
             pending.append(r)
 
     return pending
@@ -634,7 +641,7 @@ def reject_owner_submission(submission_id):
 
         if r[0] == submission_id:
 
-            status = r[12]
+            status = r[13]
 
             if status != "PENDING":
                 return False

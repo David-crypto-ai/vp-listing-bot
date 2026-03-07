@@ -58,13 +58,15 @@ ACCOUNT_NONE = 0
 ACCOUNT_TYPE = 1
 ACCOUNT_OWNER_NAME = 2
 ACCOUNT_OWNER_PHONE = 3
-ACCOUNT_OWNER_CITY = 4
-ACCOUNT_OWNER_STATE = 5
-ACCOUNT_CONFIRM = 6
-ACCOUNT_LOCATION = 7
+ACCOUNT_OWNER_EMAIL = 4
+ACCOUNT_OWNER_SOCIALS = 5
+ACCOUNT_OWNER_CITY = 6
+ACCOUNT_OWNER_STATE = 7
+ACCOUNT_CONFIRM = 8
+ACCOUNT_LOCATION = 15
 ACCOUNT_PHOTO = 13
 ACCOUNT_DUPLICATE_CHECK = 14
-ACCOUNT_EDIT_SELECT = 8
+ACCOUNT_EDIT_SELECT = 20
 ACCOUNT_EDIT_NAME = 9
 ACCOUNT_EDIT_PHONE = 10
 ACCOUNT_EDIT_CITY = 11
@@ -301,7 +303,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("account_state", ACCOUNT_NONE)
 
     # ACTIVE USERS → reopen menu only if user typed random text
-    if status == "ACTIVE" and state == ACCOUNT_NONE:
+    if status == "ACTIVE" and state == ACCOUNT_NONE and not context.user_data.get("account_draft"):
 
         # always refresh role menu after updates
         context.user_data["cached_role"] = role
@@ -421,6 +423,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
+            if text in ["➡ CONTINUE", "CONTINUE"]:
+                return
+
             context.user_data.setdefault("account_draft", {})["name"] = text
             context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
             await update.message.reply_text(
@@ -439,10 +444,10 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             context.user_data["account_draft"]["phone"] = text
-            context.user_data["account_state"] = ACCOUNT_OWNER_CITY
+            context.user_data["account_state"] = ACCOUNT_OWNER_EMAIL
 
             await update.message.reply_text(
-                "Enter city (optional):",
+                "Enter email (optional):",
                 reply_markup=ReplyKeyboardMarkup(
                     [
                         [KeyboardButton("➡ NEXT")],
@@ -507,7 +512,70 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=confirm_keyboard()
             )
             return
+        
+        if state == ACCOUNT_OWNER_EMAIL:
 
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
+                await update.message.reply_text(
+                    "Enter phone number:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
+                return
+
+            if text == "➡ NEXT":
+                context.user_data["account_draft"]["email"] = ""
+            else:
+                context.user_data["account_draft"]["email"] = text
+
+            context.user_data["account_state"] = ACCOUNT_OWNER_SOCIALS
+
+            await update.message.reply_text(
+                "Enter social media links (optional):",
+                reply_markup=ReplyKeyboardMarkup(
+                    [
+                        [KeyboardButton("➡ NEXT")],
+                        [KeyboardButton("🔙 BACK")]
+                    ],
+                    resize_keyboard=True
+                )
+            )
+            return
+        if state == ACCOUNT_OWNER_SOCIALS:
+
+            if text == "🔙 BACK":
+                context.user_data["account_state"] = ACCOUNT_OWNER_EMAIL
+                await update.message.reply_text(
+                    "Enter email (optional):",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [
+                            [KeyboardButton("➡ NEXT")],
+                            [KeyboardButton("🔙 BACK")]
+                        ],
+                        resize_keyboard=True
+                    )
+                )
+                return
+
+            if text == "➡ NEXT":
+                context.user_data["account_draft"]["socials"] = ""
+            else:
+                context.user_data["account_draft"]["socials"] = text
+
+            context.user_data["account_state"] = ACCOUNT_OWNER_CITY
+
+            await update.message.reply_text(
+                "Enter city (optional):",
+                reply_markup=ReplyKeyboardMarkup(
+                    [
+                        [KeyboardButton("➡ NEXT")],
+                        [KeyboardButton("🔙 BACK")]
+                    ],
+                    resize_keyboard=True
+                )
+            )
+            return
+            
         # --- OWNER CITY ---
         if state == ACCOUNT_OWNER_CITY:
 
@@ -601,6 +669,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 draft.get("name",""),
                                 draft.get("phone",""),
                                 draft.get("email",""),
+                                draft.get("socials",""),
                                 f"{draft.get('city','')}, {draft.get('state','')}".strip(", "),
                                 draft.get("source_platform",""),
                                 draft.get("source_link","")
@@ -621,6 +690,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 draft.get("name",""),
                                 draft.get("phone",""),
                                 draft.get("email",""),
+                                draft.get("socials",""),
                                 f"{draft.get('city','')}, {draft.get('state','')}".strip(", "),
                                 draft.get("source_platform",""),
                                 draft.get("source_link",""),
@@ -643,7 +713,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try:
 
                         caption = (
-                            "🚨 NEW OWNER SUBMISSION\n\n"
+                            "🚨 NEW ACCOUNT SUBMISSION\n\n"
                             f"Submission ID: {submission_id}\n"
                             f"Name: {draft.get('name','')}\n"
                             f"Phone: {draft.get('phone','')}\n"
@@ -651,43 +721,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"State: {draft.get('state','')}\n"
                             f"Finder ID: {uid}"
                         )
-
-                        keyboard = None
-
-                        for admin in ADMIN_IDS:
-
-                            if str(admin) == str(uid):
-                                continue
-
-                            if draft.get("photo_file_id"):
-
-                                await context.bot.send_photo(
-                                    chat_id=admin,
-                                    photo=draft["photo_file_id"],
-                                    caption=caption,
-                                    reply_markup=keyboard
-                                )
-
-                                if draft.get("existing_photo"):
-
-                                    await context.bot.send_photo(
-                                        chat_id=admin,
-                                        photo=draft["existing_photo"],
-                                        caption="Existing yard for comparison"
-                                    )
-
-                                await context.bot.send_location(
-                                    chat_id=admin,
-                                    latitude=draft.get("lat"),
-                                    longitude=draft.get("lon")
-                                )
-
-                            else:
-                                await context.bot.send_message(
-                                    chat_id=admin,
-                                    text=caption,
-                                    reply_markup=keyboard
-                                )
 
                     except Exception as e:
                         log_block("ADMIN PUSH ERROR")
@@ -928,13 +961,17 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 context.user_data["account_state"] = ACCOUNT_PHOTO
 
-                await update.message.reply_text(
-                    "📸 Now send a yard photo:",
-                    reply_markup=ReplyKeyboardMarkup(
-                        [[KeyboardButton("🔙 BACK")]],
-                        resize_keyboard=True
+                if not draft.get("photo_prompt_sent"):
+
+                    draft["photo_prompt_sent"] = True
+
+                    await update.message.reply_text(
+                        "📸 Now send a yard photo:",
+                        reply_markup=ReplyKeyboardMarkup(
+                            [[KeyboardButton("🔙 BACK")]],
+                            resize_keyboard=True
+                        )
                     )
-                )
                 return
 
             else:
@@ -1170,22 +1207,34 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("No pending owner submissions.")
                     return
 
-                await update.message.reply_text("📋 Pending Owner Submissions")
+                await update.message.reply_text("📋 Pending Account Submissions")
 
                 for r in rows:
 
                     submission_id = r[0]
+                    worker_id = r[1]
+
+                    coords = r[3]
+                    maps_link = r[4]
                     photo = r[5]
 
-                    caption = (
-                        f"⏳ Pending Owner Submission\n\n"
-                        f"Submission ID: {submission_id}\n"
-                        f"Name: {r[6]}\n"
-                        f"Phone: {r[7]}\n"
-                        f"City: {r[9]}"
-                    )
+                    name = r[6]
+                    phone = r[7]
+                    email = r[8]
+                    socials = r[9]
+                    city = r[10]
 
-                    worker_id = r[1]
+                    caption = (
+                        "🚨 NEW YARD SUBMISSION\n\n"
+                        f"Submission ID: {submission_id}\n"
+                        f"👤 Name: {name}\n"
+                        f"📞 Phone: {phone}\n"
+                        f"📧 Email: {email}\n"
+                        f"🌐 Socials: {socials}\n"
+                        f"📍 City: {city}\n"
+                        f"🗺 Maps: {maps_link}\n"
+                        f"🆔 Finder ID: {worker_id}"
+                    )
 
                     keyboard = InlineKeyboardMarkup([
                         [
@@ -1206,6 +1255,17 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             caption,
                             reply_markup=keyboard
                         )
+
+                    if coords:
+                        try:
+                            lat, lon = map(float, coords.split(","))
+                            await context.bot.send_location(
+                                chat_id=update.effective_chat.id,
+                                latitude=lat,
+                                longitude=lon
+                            )
+                        except:
+                            pass
 
             except Exception as e:
                 log_block("PENDING LOAD ERROR")
@@ -1317,8 +1377,6 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if action == "OWNER_APPROVE":
 
         try:
-            worker_id = None
-
             if ENABLE_SHEETS:
 
                 rows = await run_sheet(context, get_pending_owner_submissions)
@@ -1368,8 +1426,6 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
             log_line("ERROR", repr(e))
 
     elif action == "OWNER_REJECT":
-
-        worker_id = None
 
         try:
             if ENABLE_SHEETS:
