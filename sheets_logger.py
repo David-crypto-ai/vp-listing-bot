@@ -72,7 +72,7 @@ OWNERS_SCHEMA = [
     "SOURCE_PLATFORM",
     "SOURCE_LINK",
     "MAPS_LINK",
-    "LOCATION_PHOTO_URL",
+    "LOCATION_PHOTO_URL",   # stores Telegram file_id
     "CLAIMED_BY_FINDER_ID",
     "OWNER_STATUS",        # PENDING / APPROVED / BLOCKED
     "APPROVED_BY",
@@ -544,6 +544,7 @@ def approve_owner_submission(submission_id):
 
             owners = owners_ws()
 
+            # r[5] contains the TELEGRAM photo file_id
             owners.append_row([
                 owner_id,
                 "Truck Owner",
@@ -554,7 +555,7 @@ def approve_owner_submission(submission_id):
                 r[10],
                 r[11],
                 r[4],
-                r[5],
+                r[5],   # store TELEGRAM file_id (used later to resend photo)
                 r[1],
                 "APPROVED",
                 "",

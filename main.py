@@ -228,7 +228,7 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # PENDING USER
-    if role == "PENDING":
+    if status == "PENDING":
         await update.message.reply_text("⏳ Waiting for administrator approval.")
         return
 
@@ -817,6 +817,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         loc.longitude
                     )
 
+                    log_block("NEARBY SEARCH RESULT")
+                    log_line("NEARBY_ROWS", nearby)
+
                     if nearby:
                         nearest = nearby[0]
                         owner_row, dist = nearest
@@ -1168,6 +1171,8 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
     action = parts[0]
     submission_id = parts[1]
 
+    target_id = submission_id
+
     if action == "OWNER_APPROVE":
 
         try:
@@ -1198,7 +1203,7 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
         POSTPONED_OWNER_SUBMISSIONS[submission_id] = {
             "message": query.message.text,
-            "photo": query.message.photo[-1].file_id if query.message.photo else None
+            "photo": query.message.photo[-1].file_id if (query.message.photo and len(query.message.photo) > 0) else None
         }
 
         await query.edit_message_reply_markup(reply_markup=None)
@@ -1262,7 +1267,10 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
 # =========================================================
 app = ApplicationBuilder().token(TOKEN).build()
 
-app.add_handler(MessageHandler(filters.ALL, debug_all), group=-1)
+DEBUG_MODE = True
+
+if DEBUG_MODE:
+    app.add_handler(MessageHandler(filters.ALL, debug_all), group=-1)
 
 app.add_handler(CallbackQueryHandler(owner_review_callback, pattern="OWNER_"))
 
