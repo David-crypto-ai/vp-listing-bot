@@ -4,7 +4,7 @@ from telegram import ReplyKeyboardMarkup, KeyboardButton
 PANEL_ITEMS = "📦 ITEMS"
 PANEL_ACCOUNTS = "🏢 ACCOUNTS"
 PANEL_WORKFLOW = "🔄 WORKFLOW"
-BTN_PENDING_OWNERS = "⏳ PENDING OWNERS"
+BTN_PENDING_ACCOUNTS = "⏳ PENDING ACCOUNTS"
 PANEL_USERS = "👥 USERS"
 PANEL_TASKS = "📝 TASKS"
 PANEL_REPORTS = "📊 REPORTS PANEL"
@@ -79,7 +79,7 @@ def accounts_menu():
 def admin_main_menu():
     return kb([
         [PANEL_ITEMS, PANEL_ACCOUNTS],
-        [PANEL_WORKFLOW, BTN_PENDING_OWNERS],
+        [PANEL_WORKFLOW, BTN_PENDING_ACCOUNTS],
         [PANEL_USERS, PANEL_TASKS],
         [PANEL_REPORTS],
         [PANEL_SYSTEM],
@@ -95,29 +95,26 @@ def menu_for_role(role: str) -> ReplyKeyboardMarkup:
     # FINDER
     if role == "FINDER":
         return kb([
-            [BTN_NEW_ITEM, BTN_MY_ITEMS],
-            [PANEL_ACCOUNTS, PANEL_TASKS],
-            [BTN_HELP],
+            [BTN_NEW_ITEM, PANEL_ACCOUNTS],
+            [BTN_MY_SALES, BTN_MY_ITEMS],
+            [PANEL_TASKS, BTN_HELP],
         ])
 
     # SELLER
     if role == "SELLER":
         return kb([
-            [BTN_GET_PRICE, BTN_MARK_SOLD],
-            [BTN_MY_SALES],
-            [BTN_MY_ITEMS],
-            [PANEL_ACCOUNTS, PANEL_TASKS],
-            [BTN_HELP],
+            [BTN_GET_PRICE, PANEL_ACCOUNTS],
+            [BTN_MY_SALES, BTN_MY_ITEMS],
+            [PANEL_TASKS, BTN_HELP],
         ])
 
     # BOTH
     if role in ("FINDER+SELLER", "BOTH"):
         return kb([
-            [BTN_NEW_ITEM, BTN_MY_ITEMS],
+            [BTN_NEW_ITEM, PANEL_ACCOUNTS],
             [BTN_GET_PRICE, BTN_MARK_SOLD],
-            [BTN_MY_SALES],
-            [PANEL_ACCOUNTS, PANEL_TASKS],
-            [BTN_HELP],
+            [BTN_MY_SALES, BTN_MY_ITEMS],
+            [PANEL_TASKS, BTN_HELP],
         ])
 
     # GATEKEEPER
@@ -145,7 +142,7 @@ async def open_menu_for_role(update, context, role: str):
     keyboard = menu_for_role(role)
 
     target = update.message or update.callback_query.message
-    await update.message.reply_text(
+    await target.reply_text(
         "📋 Menu",
         reply_markup=keyboard
     )

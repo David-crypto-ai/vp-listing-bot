@@ -22,7 +22,8 @@ from menus import (
     open_menu_for_role,
     accounts_menu,
     PANEL_ITEMS, PANEL_ACCOUNTS, PANEL_WORKFLOW, PANEL_USERS,
-    PANEL_TASKS, PANEL_REPORTS, PANEL_SYSTEM, PANEL_BACK
+    PANEL_TASKS, PANEL_REPORTS, PANEL_SYSTEM, PANEL_BACK,
+    BTN_PENDING_ACCOUNTS
 )
 
 def log_line(label, value=""):
@@ -40,7 +41,6 @@ TOKEN = os.environ["TELEGRAM_TOKEN"]
 ENABLE_SHEETS = True  # Set to True when going live
 ROLE_CACHE = {}
 ADMIN_CACHE = set()
-SEEN_USERS = set()
 
 POSTPONED_OWNER_SUBMISSIONS = {}
 
@@ -364,7 +364,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- SELECT TYPE ---
         if state == ACCOUNT_TYPE:
 
-            if text == "👤 OWNER":
+            if text == "📍 LOCATION":
 
                 context.user_data["account_state"] = ACCOUNT_LOCATION
                 context.user_data["account_draft"] = {
@@ -410,7 +410,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "Select account type:",
                     reply_markup=ReplyKeyboardMarkup(
                         [
-                            [KeyboardButton("👤 OWNER")],
+                            [KeyboardButton("📍 LOCATION")],
                             [KeyboardButton("🌐 ONLINE")],
                             [KeyboardButton("🏛️ AUCTION")],
                             [KeyboardButton("🔙 BACK")]
@@ -557,7 +557,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 draft = context.user_data["account_draft"]
 
                 # Step 1: Ensure photo exists
-                if "photo_file_id" not in draft:
+                if not draft.get("photo_file_id"):
 
                     context.user_data["account_state"] = ACCOUNT_PHOTO
 
@@ -643,6 +643,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                         caption = (
                             "🚨 NEW OWNER SUBMISSION\n\n"
+                            f"Submission ID: {submission_id}\n"
                             f"Name: {draft.get('name','')}\n"
                             f"Phone: {draft.get('phone','')}\n"
                             f"City: {draft.get('city','')}\n"
@@ -650,15 +651,18 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"Finder ID: {uid}"
                         )
 
-                        keyboard = InlineKeyboardMarkup([
-                            [
-                                InlineKeyboardButton("✅ APPROVE", callback_data=f"OWNER_APPROVE|{submission_id}"),
-                                InlineKeyboardButton("❌ REJECT", callback_data=f"OWNER_REJECT|{submission_id}")
-                            ],
-                            [
-                                InlineKeyboardButton("⏳ POSTPONE", callback_data=f"OWNER_POSTPONE|{submission_id}")
-                            ]
-                        ])
+                        if submission_id:
+                            keyboard = InlineKeyboardMarkup([
+                                [
+                                    InlineKeyboardButton("✅ APPROVE", callback_data=f"OWNER_APPROVE|{submission_id}"),
+                                    InlineKeyboardButton("❌ REJECT", callback_data=f"OWNER_REJECT|{submission_id}")
+                                ],
+                                [
+                                    InlineKeyboardButton("⏳ POSTPONE", callback_data=f"OWNER_POSTPONE|{submission_id}")
+                                ]
+                            ])
+                        else:
+                            keyboard = None
 
                         for admin in ADMIN_IDS:
 
@@ -699,10 +703,16 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         log_block("ADMIN PUSH ERROR")
                         log_line("ERROR", repr(e))
 
+                    if uid in ADMIN_IDS:
+                        message = "✅ Account created successfully."
+                    else:
+                        message = "⏳ Account submitted. Waiting for admin approval."
+
                     await update.message.reply_text(
-                        "✅ Account created successfully.",
+                        message,
                         reply_markup=base_nav_keyboard()
                     )
+
                     clear_user_session(context)
                     await open_menu_for_role(update, context, role)
                     return
@@ -980,7 +990,10 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return
 
-                context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
+                if draft.get("distance_warning"):
+                    context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
+                else:
+                    context.user_data["account_state"] = ACCOUNT_OWNER_NAME
 
                 if draft.get("distance_warning"):
 
@@ -1035,11 +1048,13 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if "CONTINUE" in text:
 
-                context.user_data.setdefault("account_draft", {})["duplicate_confirmed"] = True
-                context.user_data["account_state"] = ACCOUNT_PHOTO
+                draft = context.user_data.setdefault("account_draft", {})
+                draft["duplicate_confirmed"] = True
+
+                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
 
                 await update.message.reply_text(
-                    "📸 Now send a yard photo:",
+                    "Enter owner name:",
                     reply_markup=ReplyKeyboardMarkup(
                         [[KeyboardButton("🔙 BACK")]],
                         resize_keyboard=True
@@ -1076,7 +1091,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = ReplyKeyboardMarkup(
             [
-                [KeyboardButton("👤 OWNER")],
+                [KeyboardButton("📍 LOCATION")],
                 [KeyboardButton("🌐 ONLINE")],
                 [KeyboardButton("🏛️ AUCTION")],
                 [KeyboardButton("🔙 BACK")]
@@ -1118,7 +1133,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     # ================= ADMIN PANEL NAVIGATION =================
     if role == "ADMIN":
-        if text == "⏳ PENDING OWNERS":
+        if text == BTN_PENDING_ACCOUNTS:
 
             try:
                 rows = await run_sheet(
@@ -1137,7 +1152,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     caption = (
                         f"⏳ Pending Owner Submission\n\n"
-                        f"ID: {submission_id}\n"
+                        f"Submission ID: {submission_id}\n"
                         f"Name: {r[6]}\n"
                         f"Phone: {r[7]}\n"
                         f"City: {r[9]}"
@@ -1202,7 +1217,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=data["photo"],
-                        caption=f"⏳ Postponed Submission {sid}",
+                        caption=f"⏳ Postponed Submission\nSubmission ID: {sid}",
                         reply_markup=keyboard
                     )
                 else:
@@ -1229,6 +1244,19 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚙️ SYSTEM panel opened")
             return
 
+async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    data = query.data or ""
+
+    parts = data.split("|")
+    action = parts[0] if parts else ""
+
+    if action.startswith("OWNER_"):
+        await owner_review_callback(update, context)
+        return
+
+
 async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -1243,12 +1271,25 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
     action = parts[0]
     submission_id = parts[1]
 
-    target_id = submission_id
+    admin_id = str(query.from_user.id)
+
+    if admin_id not in ADMIN_IDS:
+        await query.answer("⛔ Admin only", show_alert=True)
+        return
 
     if action == "OWNER_APPROVE":
 
         try:
+            worker_id = None
+
             if ENABLE_SHEETS:
+
+                rows = await run_sheet(context, get_pending_owner_submissions)
+                for r in rows:
+                    if r[0] == submission_id:
+                        worker_id = r[1]
+                        break
+
                 owner_id = await run_sheet(
                     context,
                     approve_owner_submission,
@@ -1267,9 +1308,42 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
         await query.delete_message()
 
+        # notify worker who submitted
+        try:
+            if worker_id:
+                await context.bot.send_message(
+                    chat_id=worker_id,
+                    text="✅ Your submitted yard has been approved."
+                )
+        except Exception as e:
+            log_block("WORKER APPROVAL NOTIFY ERROR")
+            log_line("ERROR", repr(e))
+
     elif action == "OWNER_REJECT":
 
+        worker_id = None
+
+        try:
+            rows = await run_sheet(context, get_pending_owner_submissions)
+            for r in rows:
+                if r[0] == submission_id:
+                    worker_id = r[1]
+                    break
+        except:
+            pass
+
         await query.delete_message()
+
+        # notify worker
+        try:
+            if worker_id:
+                await context.bot.send_message(
+                    chat_id=worker_id,
+                    text="❌ Your submitted yard was rejected by admin."
+                )
+        except Exception as e:
+            log_block("WORKER REJECT NOTIFY ERROR")
+            log_line("ERROR", repr(e))
 
     elif action == "OWNER_POSTPONE":
 
@@ -1284,56 +1358,6 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
             f"⏳ Submission {submission_id} postponed.\nYou can review it later in WORKFLOW."
         )
 
-    admin_id = str(query.from_user.id)
-
-    # 🚫 Only admins can approve users
-    if admin_id not in ADMIN_IDS:
-        await query.edit_message_text("⛔ You are not allowed to approve users.")
-        return
-
-    # ================= APPROVE =================
-    if action == "APPROVE":
-        if len(parts) < 3:
-            await query.edit_message_text("❌ Invalid approval data")
-            return
-
-        role = parts[2]
-
-        # BOTH = FINDER + SELLER
-        if role == "BOTH":
-            await run_sheet(context, assign_role, target_id, "FINDER", admin_id)
-            await run_sheet(context, assign_role, target_id, "SELLER", admin_id)
-            role_text = "FINDER + SELLER"
-        else:
-            await run_sheet(context, assign_role, target_id, role, admin_id)
-            role_text = role
-
-        # update cache immediately (prevents START loop)
-        ROLE_CACHE[target_id] = (role_text if role != "BOTH" else "FINDER", "ACTIVE")
-
-        # force next message to reopen menu
-        context.application.bot_data.setdefault("force_role_cache", {})[target_id] = ROLE_CACHE[target_id]
-
-        await query.edit_message_text(
-            f"✅ User {target_id} approved as {role_text}"
-        )
-
-        # 🔔 Notify the approved user
-        try:
-            await context.bot.send_message(
-                chat_id=target_id,
-                text="🎉 Your account has been approved!\nSend any message to open your workspace."
-            )
-
-        except Exception:
-            pass
-
-    # ================= REJECT =================
-    elif action == "REJECT":
-        await query.edit_message_text(
-            f"❌ User {target_id} rejected"
-        )
-
 # =========================================================
 # APP
 # =========================================================
@@ -1341,10 +1365,9 @@ app = ApplicationBuilder().token(TOKEN).build()
 
 DEBUG_MODE = True
 
-if DEBUG_MODE:
-    app.add_handler(MessageHandler(filters.ALL, debug_all), group=-1)
+filters.TEXT
 
-app.add_handler(CallbackQueryHandler(owner_review_callback, pattern="OWNER_"))
+app.add_handler(CallbackQueryHandler(callback_router))
 
 # LOCATION MUST COME FIRST
 # START must always work first
