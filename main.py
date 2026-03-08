@@ -63,9 +63,9 @@ ACCOUNT_OWNER_SOCIALS = 5
 ACCOUNT_OWNER_CITY = 6
 ACCOUNT_OWNER_STATE = 7
 ACCOUNT_CONFIRM = 8
-ACCOUNT_LOCATION = 15
-ACCOUNT_PHOTO = 13
-ACCOUNT_DUPLICATE_CHECK = 14
+ACCOUNT_LOCATION = 13
+ACCOUNT_PHOTO = 14
+ACCOUNT_DUPLICATE_CHECK = 15
 ACCOUNT_EDIT_SELECT = 20
 ACCOUNT_EDIT_NAME = 9
 ACCOUNT_EDIT_PHONE = 10
@@ -284,7 +284,23 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # capture message text safely (buttons, captions, etc)
-    text = (update.message.text or "").strip().upper()
+    raw_text = update.message.text or update.message.caption or ""
+
+    # normalize all buttons to remove emojis and spaces
+    text = (
+        raw_text.upper()
+        .replace("➡️", "")
+        .replace("➡", "")
+        .replace("❌", "")
+        .replace("✅", "")
+        .replace("🔙", "")
+        .strip()
+    )
+
+    log_block("BUTTON DEBUG")
+    log_line("RAW_TEXT", raw_text)
+    log_line("NORMALIZED_TEXT", text)
+
     if not text and update.message.caption:
         text = update.message.caption.strip()
 
@@ -1030,8 +1046,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ================= PHOTO CAPTURE =================
         if state == ACCOUNT_PHOTO:
 
-            # handle buttons FIRST
-            if text in ["➡ CONTINUE", "CONTINUE"]:
+            # normalize button input
+            clean_text = (
+                text.replace("➡️", "")
+                    .replace("➡", "")
+                    .replace("❌", "")
+                    .strip()
+            )
+
+            if clean_text == "CONTINUE":
 
                 if context.user_data.get("photo_continue_used"):
                     return
@@ -1049,7 +1072,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
 
-            if text in ["❌ CANCEL", "CANCEL"]:
+            if clean_text == "CANCEL":
+
+                if context.user_data.get("photo_continue_used"):
+                    return
+
+                context.user_data["photo_continue_used"] = True
+                clear_user_session(context)
+                await open_menu_for_role(update, context, role)
+                return
 
                 if context.user_data.get("photo_continue_used"):
                     return
@@ -1569,13 +1600,23 @@ app.add_error_handler(error_handler)
 
 print("Bot running...")
 from telegram.error import Conflict
+import sys
+import asyncio
 
-try:
-    app.run_polling(
-        drop_pending_updates=True,
-        poll_interval=0.1,
-        timeout=30,
-        bootstrap_retries=5,
-    )
-except Conflict:
-    print("Another bot instance is already running. Exiting.")
+async def start_bot():
+    while True:
+        try:
+            await app.run_polling(
+                drop_pending_updates=True,
+                poll_interval=0.1,
+                timeout=30,
+                bootstrap_retries=5,
+            )
+        except Conflict:
+            print("Another bot instance detected. Waiting before retry...")
+            await asyncio.sleep(5)
+        except Exception as e:
+            print("Unexpected bot error:", repr(e))
+            await asyncio.sleep(5)
+
+asyncio.run(start_bot())
