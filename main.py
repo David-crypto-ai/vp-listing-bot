@@ -286,20 +286,24 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # capture message text safely (buttons, captions, etc)
     raw_text = update.message.text or update.message.caption or ""
 
-    # normalize all buttons to remove emojis and spaces
-    text = (
+    # normalized button version (safe for comparisons)
+    btn = (
         raw_text.upper()
         .replace("➡️", "")
         .replace("➡", "")
         .replace("❌", "")
         .replace("✅", "")
         .replace("🔙", "")
+        .replace("📍", "")
         .strip()
     )
 
+    # keep raw text for real user input
+    text = raw_text.strip()
+
     log_block("BUTTON DEBUG")
     log_line("RAW_TEXT", raw_text)
-    log_line("NORMALIZED_TEXT", text)
+    log_line("BUTTON_TEXT", btn)
 
     if not text and update.message.caption:
         text = update.message.caption.strip()
@@ -383,7 +387,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- SELECT TYPE ---
         if state == ACCOUNT_TYPE:
 
-            if text == "📍 LOCATION":
+            if btn == "LOCATION":
 
                 context.user_data["account_state"] = ACCOUNT_LOCATION
                 context.user_data["account_draft"] = {
@@ -423,22 +427,10 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- OWNER NAME ---
         if state == ACCOUNT_OWNER_NAME:
 
-            if text in ["➡ CONTINUE", "CONTINUE"]:
-
-                context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
-
-                await update.message.reply_text(
-                    "Enter phone number:",
-                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
-                )
+            if btn == "CONTINUE":
                 return
 
-            if text in ["❌ CANCEL", "CANCEL"]:
-                clear_user_session(context)
-                await open_menu_for_role(update, context, role)
-                return
-
-            if text == "🔙 BACK":
+            if btn == "BACK":
                 context.user_data["account_state"] = ACCOUNT_TYPE
                 await update.message.reply_text(
                     "Select account type:",
@@ -454,8 +446,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            context.user_data.setdefault("account_draft", {})["name"] = text
+            context.user_data.setdefault("account_draft", {})["name"] = raw_text
             context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
+
             await update.message.reply_text(
                 "Enter phone number:",
                 reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
@@ -496,14 +489,14 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            if text == "🇲🇽 MEXICO":
+            if text == "MEXICO":
                 await update.message.reply_text(
                     "Select state:",
                     reply_markup=state_keyboard("MEXICO")
                 )
                 return
 
-            if text == "🇺🇸 USA":
+            if text == "USA":
                 await update.message.reply_text(
                     "Select state:",
                     reply_markup=state_keyboard("USA")
