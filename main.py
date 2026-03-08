@@ -296,6 +296,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         .replace("✅", "")
         .replace("🔙", "")
         .replace("📍", "")
+        .replace("⏳", "")
         .strip()
     )
 
@@ -1258,7 +1259,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     # ================= ADMIN PANEL NAVIGATION =================
     if role == "ADMIN":
-        if BTN_PENDING_ACCOUNTS in raw_text:
+        if "PENDING ACCOUNTS" in btn:
 
             try:
                 rows = await run_sheet(
