@@ -746,7 +746,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"Phone: {draft.get('phone','')}\n"
                             f"City: {draft.get('city','')}\n"
                             f"State: {draft.get('state','')}\n"
-                            f"Finder ID: {uid}"
+                            f"Finder ID: {uid}\n\n"
+                            f"{draft.get('duplicate_message','')}"
                         )
 
                         if submission_id and ADMIN_IDS:
