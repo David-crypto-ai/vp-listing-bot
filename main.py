@@ -1604,24 +1604,15 @@ async def error_handler(update, context):
 app.add_error_handler(error_handler)
 
 print("Bot running...")
+
 from telegram.error import Conflict
-import sys
-import asyncio
 
-async def start_bot():
-    while True:
-        try:
-            await app.run_polling(
-                drop_pending_updates=True,
-                poll_interval=0.1,
-                timeout=30,
-                bootstrap_retries=5,
-            )
-        except Conflict:
-            print("Another bot instance detected. Waiting before retry...")
-            await asyncio.sleep(5)
-        except Exception as e:
-            print("Unexpected bot error:", repr(e))
-            await asyncio.sleep(5)
-
-asyncio.run(start_bot())
+try:
+    app.run_polling(
+        drop_pending_updates=True,
+        poll_interval=0.1,
+        timeout=30,
+        bootstrap_retries=5,
+    )
+except Conflict:
+    print("Another bot instance detected. Restarting...")
