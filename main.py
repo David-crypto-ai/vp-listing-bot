@@ -1173,12 +1173,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ================= DUPLICATE CHECK =================
         if state == ACCOUNT_DUPLICATE_CHECK:
 
-            if "CANCEL" in text:
+            if btn == "CANCEL":
                 clear_user_session(context)
                 await open_menu_for_role(update, context, role)
                 return
 
-            if text not in ["➡ CONTINUE", "CONTINUE"]:
+            if btn != "CONTINUE":
                 return
 
             draft = context.user_data.setdefault("account_draft", {})
