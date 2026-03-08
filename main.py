@@ -1307,6 +1307,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     socials = r[9]
                     city = r[10]
 
+                    distance_warning = r[13] if len(r) > 13 else ""
+                    duplicate_message = ""
+
+                    if distance_warning:
+                        duplicate_message = f"\n\n⚠ Possible duplicate detected\n{distance_warning}"
+
                     caption = (
                         "🚨 NEW YARD SUBMISSION\n\n"
                         f"Submission ID: {submission_id}\n"
@@ -1317,6 +1323,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"📍 City: {city}\n"
                         f"🗺 Maps: {maps_link}\n"
                         f"🆔 Finder ID: {worker_id}"
+                        f"{duplicate_message}"
                     )
 
                     keyboard = InlineKeyboardMarkup([
@@ -1338,6 +1345,40 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             caption,
                             reply_markup=keyboard
                         )
+
+                    # ----- SHOW EXISTING DUPLICATE PHOTO TO ADMIN -----
+                    if distance_warning:
+
+                        try:
+
+                            parts = distance_warning.split("_OF_")
+
+                            if len(parts) == 2:
+                                owner_id = parts[1]
+
+                                from sheets_logger import get_owner_by_id
+
+                                owner_row = await run_sheet(
+                                    context,
+                                    get_owner_by_id,
+                                    owner_id
+                                )
+
+                                if owner_row and len(owner_row) >= 10:
+
+                                    existing_photo = owner_row[9]
+
+                                    if existing_photo:
+
+                                        await context.bot.send_photo(
+                                            chat_id=update.effective_chat.id,
+                                            photo=existing_photo,
+                                            caption="Existing yard photo (possible duplicate)"
+                                        )
+
+                        except Exception as e:
+                            log_block("ADMIN DUPLICATE PHOTO ERROR")
+                            log_line("ERROR", repr(e))
 
                     if coords:
                         try:

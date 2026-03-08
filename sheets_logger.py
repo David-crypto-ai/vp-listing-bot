@@ -227,6 +227,15 @@ def check_nearby_accounts(lat, lon, radius=120):
 
     matches = []
 
+    # ----- quick bounding box -----
+    lat_buffer = radius / 111000
+    lon_buffer = radius / (111000 * math.cos(math.radians(lat)))
+
+    min_lat = lat - lat_buffer
+    max_lat = lat + lat_buffer
+    min_lon = lon - lon_buffer
+    max_lon = lon + lon_buffer
+
     for r in rows:
 
         if len(r) < 17:
@@ -240,6 +249,10 @@ def check_nearby_accounts(lat, lon, radius=120):
         try:
             lat2, lon2 = map(float, coords.split(","))
         except:
+            continue
+
+        # ----- skip far coordinates fast -----
+        if lat2 < min_lat or lat2 > max_lat or lon2 < min_lon or lon2 > max_lon:
             continue
 
         dist = haversine_distance(lat, lon, lat2, lon2)
@@ -287,7 +300,7 @@ def create_owner_submission(
     except Exception:
         ws = ss.add_worksheet(title="OWNER_SUBMISSIONS", rows="5000", cols="20")
 
-        ws.append_row([
+        schema = [
             "SUBMISSION_ID",
             "SUBMITTED_BY",
             "SUBMITTED_AT",
@@ -304,7 +317,9 @@ def create_owner_submission(
             "ADMIN_STATUS",
             "ADMIN_NOTES",
             "DISTANCE_WARNING"
-        ])
+        ]
+
+        ws.append_row(schema)
 
     rows = ws.get_all_values()
 
@@ -387,6 +402,19 @@ def get_owner(owner_id: str):
     for r in rows:
         if r and r[0] == owner_id:
             return r
+    return None
+
+
+def get_owner_by_id(owner_id: str):
+
+    ws = owners_ws()
+
+    rows = ws.get_all_values()[1:]
+
+    for r in rows:
+        if r and r[0] == owner_id:
+            return r
+
     return None
 
 def owners_recent_for_user(user_id: str, limit=10):
