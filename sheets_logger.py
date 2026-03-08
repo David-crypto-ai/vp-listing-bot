@@ -238,10 +238,13 @@ def check_nearby_accounts(lat, lon, radius=200):
 
     for r in rows:
 
-        if len(r) < 17:
+        if len(r) < 18:
             continue
 
-        coords = r[16]
+        coords = r[17]
+
+        print("[DISTANCE DEBUG] OWNER_ID:", r[0])
+        print("[DISTANCE DEBUG] COORDS_CELL:", coords)
 
         if not coords:
             continue
@@ -258,6 +261,7 @@ def check_nearby_accounts(lat, lon, radius=200):
         dist = haversine_distance(lat, lon, lat2, lon2)
 
         if dist <= radius:
+            print("[DISTANCE DEBUG] MATCH FOUND:", r[0], "DIST:", int(dist))
             matches.append((r, int(dist)))
 
     return matches

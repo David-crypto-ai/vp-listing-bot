@@ -1644,6 +1644,9 @@ print("Bot running...")
 
 from telegram.error import Conflict
 
+# force Telegram to disconnect any previous bot instance
+app.bot.delete_webhook(drop_pending_updates=True)
+
 try:
     app.run_polling(
         drop_pending_updates=True,
