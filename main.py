@@ -1125,8 +1125,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 if draft.get("distance_warning"):
                     context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
-                else:
-                    context.user_data["account_state"] = ACCOUNT_OWNER_NAME
 
                 if draft.get("distance_warning"):
 
