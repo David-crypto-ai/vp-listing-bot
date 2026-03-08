@@ -1571,6 +1571,10 @@ app.add_handler(CommandHandler("start", start_button), group=0)
 
 # Then normal routing
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
+
+# ensure photos always reach the wizard
+app.add_handler(MessageHandler(filters.PHOTO, route_message), group=1)
+
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
 
 async def error_handler(update, context):
