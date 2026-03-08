@@ -1030,17 +1030,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ================= PHOTO CAPTURE =================
         if state == ACCOUNT_PHOTO:
 
-            # prevent double press
-            if context.user_data.get("photo_continue_used"):
-                return
-
-            if text in ["❌ CANCEL", "CANCEL"]:
-                context.user_data["photo_continue_used"] = True
-                clear_user_session(context)
-                await open_menu_for_role(update, context, role)
-                return
-
+            # handle buttons FIRST
             if text in ["➡ CONTINUE", "CONTINUE"]:
+
+                if context.user_data.get("photo_continue_used"):
+                    return
+
                 context.user_data["photo_continue_used"] = True
                 context.user_data["account_state"] = ACCOUNT_OWNER_NAME
 
@@ -1051,6 +1046,17 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         resize_keyboard=True
                     )
                 )
+                return
+
+
+            if text in ["❌ CANCEL", "CANCEL"]:
+
+                if context.user_data.get("photo_continue_used"):
+                    return
+
+                context.user_data["photo_continue_used"] = True
+                clear_user_session(context)
+                await open_menu_for_role(update, context, role)
                 return
 
             if text == "🔙 BACK":
@@ -1562,9 +1568,14 @@ async def error_handler(update, context):
 app.add_error_handler(error_handler)
 
 print("Bot running...")
-app.run_polling(
-    drop_pending_updates=True,
-    poll_interval=0.1,
-    timeout=30,
-    bootstrap_retries=5,
-)
+from telegram.error import Conflict
+
+try:
+    app.run_polling(
+        drop_pending_updates=True,
+        poll_interval=0.1,
+        timeout=30,
+        bootstrap_retries=5,
+    )
+except Conflict:
+    print("Another bot instance is already running. Exiting.")
