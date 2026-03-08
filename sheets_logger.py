@@ -221,7 +221,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
 
-def check_nearby_accounts(lat, lon, radius=120):
+def check_nearby_accounts(lat, lon, radius=200):
     ws = owners_ws()
     rows = ws.get_all_values()[1:]
 

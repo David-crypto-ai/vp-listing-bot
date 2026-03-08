@@ -954,6 +954,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     log_line("NEARBY_ROWS", nearby)
 
                     if nearby:
+
+                        nearby.sort(key=lambda x: x[1])
+
                         nearest = nearby[0]
                         owner_row, dist = nearest
 
@@ -977,8 +980,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                             existing_photo = None
 
-                            if len(owner_row) >= 10:
-                                existing_photo = owner_row[9]
+                            if len(owner_row) >= 11:
+                                existing_photo = owner_row[10]
 
                             log_line("EXISTING_PHOTO_CELL", existing_photo)
 
@@ -1307,7 +1310,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     socials = r[9]
                     city = r[10]
 
-                    distance_warning = r[13] if len(r) > 13 else ""
+                    distance_warning = r[15] if len(r) > 15 else ""
                     duplicate_message = ""
 
                     if distance_warning:
@@ -1609,6 +1612,7 @@ app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
 async def error_handler(update, context):
 
     if "terminated by other getUpdates request" in str(context.error):
+        print("⚠ Another bot instance is polling Telegram")
         return
 
     log_block("GLOBAL ERROR")
