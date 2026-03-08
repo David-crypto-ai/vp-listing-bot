@@ -1030,6 +1030,29 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ================= PHOTO CAPTURE =================
         if state == ACCOUNT_PHOTO:
 
+            # prevent double press
+            if context.user_data.get("photo_continue_used"):
+                return
+
+            if text in ["❌ CANCEL", "CANCEL"]:
+                context.user_data["photo_continue_used"] = True
+                clear_user_session(context)
+                await open_menu_for_role(update, context, role)
+                return
+
+            if text in ["➡ CONTINUE", "CONTINUE"]:
+                context.user_data["photo_continue_used"] = True
+                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+
+                await update.message.reply_text(
+                    "Enter owner name:",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [[KeyboardButton("🔙 BACK")]],
+                        resize_keyboard=True
+                    )
+                )
+                return
+
             if text == "🔙 BACK":
                 context.user_data["account_state"] = ACCOUNT_LOCATION
                 keyboard = ReplyKeyboardMarkup(
@@ -1528,6 +1551,10 @@ app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
 
 async def error_handler(update, context):
+
+    if "terminated by other getUpdates request" in str(context.error):
+        return
+
     log_block("GLOBAL ERROR")
     log_line("ERROR", repr(context.error))
     log_line("UPDATE", update)
