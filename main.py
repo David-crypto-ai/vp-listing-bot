@@ -407,6 +407,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- OWNER NAME ---
         if state == ACCOUNT_OWNER_NAME:
 
+            if "CONTINUE" in text:
+                return
+
             if text == "🔙 BACK":
                 context.user_data["account_state"] = ACCOUNT_TYPE
                 await update.message.reply_text(
@@ -721,6 +724,40 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"State: {draft.get('state','')}\n"
                             f"Finder ID: {uid}"
                         )
+
+                        if submission_id and ADMIN_IDS:
+
+                            for admin in ADMIN_IDS:
+
+                                keyboard = InlineKeyboardMarkup([
+                                    [
+                                        InlineKeyboardButton(
+                                            "✅ APPROVE",
+                                            callback_data=f"OWNER_APPROVE|{submission_id}|{uid}"
+                                        ),
+                                        InlineKeyboardButton(
+                                            "❌ REJECT",
+                                            callback_data=f"OWNER_REJECT|{submission_id}|{uid}"
+                                        )
+                                    ]
+                                ])
+
+                                if draft.get("photo_file_id"):
+
+                                    await context.bot.send_photo(
+                                        chat_id=admin,
+                                        photo=draft["photo_file_id"],
+                                        caption=caption,
+                                        reply_markup=keyboard
+                                    )
+
+                                else:
+
+                                    await context.bot.send_message(
+                                        chat_id=admin,
+                                        text=caption,
+                                        reply_markup=keyboard
+                                    )
 
                     except Exception as e:
                         log_block("ADMIN PUSH ERROR")
@@ -1082,7 +1119,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 return
 
-            await update.message.reply_text("Please send a photo.")
             return
 
         # ================= DUPLICATE CHECK =================
@@ -1195,7 +1231,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     # ================= ADMIN PANEL NAVIGATION =================
     if role == "ADMIN":
-        if text == BTN_PENDING_ACCOUNTS:
+        if BTN_PENDING_ACCOUNTS in text:
 
             try:
                 rows = await run_sheet(
