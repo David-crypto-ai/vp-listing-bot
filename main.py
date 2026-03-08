@@ -280,18 +280,11 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    print("ROUTE_MESSAGE TRIGGERED")
-
     if not update.message:
-        print("NO MESSAGE OBJECT")
         return
 
     # capture message text safely (buttons, captions, etc)
     raw_text = update.message.text or update.message.caption or ""
-
-    print("RAW UPDATE TYPE:", type(update.message))
-    print("HAS LOCATION:", bool(update.message.location))
-    print("HAS PHOTO:", bool(update.message.photo))
 
     # normalized button version (safe for comparisons)
     btn = (
@@ -1571,10 +1564,6 @@ app.add_handler(CommandHandler("start", start_button), group=0)
 
 # Then normal routing
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
-
-# ensure photos always reach the wizard
-app.add_handler(MessageHandler(filters.PHOTO, route_message), group=1)
-
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
 
 async def error_handler(update, context):
