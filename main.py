@@ -1258,7 +1258,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     # ================= ADMIN PANEL NAVIGATION =================
     if role == "ADMIN":
-        if BTN_PENDING_ACCOUNTS in text:
+        if BTN_PENDING_ACCOUNTS in raw_text:
 
             try:
                 rows = await run_sheet(
@@ -1276,6 +1276,10 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
 
                 for r in rows:
+
+                    await update.message.reply_text(
+                        "--------------------------------"
+                    )
 
                     submission_id = r[0]
                     worker_id = r[1]
