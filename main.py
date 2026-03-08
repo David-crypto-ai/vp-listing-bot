@@ -739,60 +739,24 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 if save_success:
 
-                    # ===== PUSH SUBMISSION TO ADMINS =====
+                    # ===== NOTIFY ADMINS ABOUT NEW PENDING ACCOUNT =====
                     try:
-
-                        caption = (
-                            "🚨 NEW ACCOUNT SUBMISSION\n\n"
-                            f"Submission ID: {submission_id}\n"
-                            f"Name: {draft.get('name','')}\n"
-                            f"Phone: {draft.get('phone','')}\n"
-                            f"City: {draft.get('city','')}\n"
-                            f"State: {draft.get('state','')}\n"
-                            f"Finder ID: {uid}\n\n"
-                            f"{draft.get('duplicate_message','')}"
-                        )
 
                         if submission_id and ADMIN_IDS:
 
                             for admin in ADMIN_IDS:
 
-                                keyboard = InlineKeyboardMarkup([
-                                    [
-                                        InlineKeyboardButton(
-                                            "✅ APPROVE",
-                                            callback_data=f"OWNER_APPROVE|{submission_id}|{uid}"
-                                        ),
-                                        InlineKeyboardButton(
-                                            "❌ REJECT",
-                                            callback_data=f"OWNER_REJECT|{submission_id}|{uid}"
-                                        )
-                                    ]
-                                ])
-
-                                if draft.get("photo_file_id"):
-
-                                    msg = await context.bot.send_photo(
-                                        chat_id=admin,
-                                        photo=draft["photo_file_id"],
-                                        caption=caption,
-                                        reply_markup=keyboard
+                                await context.bot.send_message(
+                                    chat_id=admin,
+                                    text=(
+                                        "🔴 New Pending Account\n\n"
+                                        "Open review queue:\n"
+                                        "🏢 ACCOUNTS → ⏳ PENDING ACCOUNTS"
                                     )
-
-                                    POSTPONED_OWNER_SUBMISSIONS[submission_id] = {
-                                        "main_msg": msg.message_id
-                                    }
-
-                                else:
-
-                                    await context.bot.send_message(
-                                        chat_id=admin,
-                                        text=caption,
-                                        reply_markup=keyboard
-                                    )
+                                )
 
                     except Exception as e:
-                        log_block("ADMIN PUSH ERROR")
+                        log_block("ADMIN NOTIFY ERROR")
                         log_line("ERROR", repr(e))
 
                     if uid in ADMIN_IDS:
@@ -1306,7 +1270,10 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("No pending owner submissions.")
                     return
 
-                await update.message.reply_text("📋 Pending Account Submissions")
+                await update.message.reply_text(
+                    "📋 Pending Account Submissions\n"
+                    "--------------------------------"
+                )
 
                 for r in rows:
 

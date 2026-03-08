@@ -69,6 +69,7 @@ def accounts_menu():
         [BTN_MY_ACCOUNTS],
         [BTN_NEARBY_ACCOUNTS],
         [BTN_SEARCH_ACCOUNT],
+        [BTN_PENDING_ACCOUNTS],
         [PANEL_BACK],
     ])
 
@@ -79,7 +80,7 @@ def accounts_menu():
 def admin_main_menu():
     return kb([
         [PANEL_ITEMS, PANEL_ACCOUNTS],
-        [PANEL_WORKFLOW, BTN_PENDING_ACCOUNTS],
+        [PANEL_WORKFLOW],
         [PANEL_USERS, PANEL_TASKS],
         [PANEL_REPORTS],
         [PANEL_SYSTEM],
