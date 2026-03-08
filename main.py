@@ -280,11 +280,18 @@ async def start_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    print("ROUTE_MESSAGE TRIGGERED")
+
     if not update.message:
+        print("NO MESSAGE OBJECT")
         return
 
     # capture message text safely (buttons, captions, etc)
     raw_text = update.message.text or update.message.caption or ""
+
+    print("RAW UPDATE TYPE:", type(update.message))
+    print("HAS LOCATION:", bool(update.message.location))
+    print("HAS PHOTO:", bool(update.message.photo))
 
     # normalized button version (safe for comparisons)
     btn = (
