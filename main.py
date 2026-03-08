@@ -407,7 +407,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- OWNER NAME ---
         if state == ACCOUNT_OWNER_NAME:
 
-            if "CONTINUE" in text:
+            if text in ["➡ CONTINUE", "CONTINUE"]:
+                return
+
+            if text in ["❌ CANCEL", "CANCEL"]:
+                clear_user_session(context)
+                await open_menu_for_role(update, context, role)
                 return
 
             if text == "🔙 BACK":
@@ -424,9 +429,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         resize_keyboard=True
                     )
                 )
-                return
-
-            if text in ["➡ CONTINUE", "CONTINUE"]:
                 return
 
             context.user_data.setdefault("account_draft", {})["name"] = text
@@ -583,10 +585,16 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if state == ACCOUNT_OWNER_CITY:
 
             if text == "🔙 BACK":
-                context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
+                context.user_data["account_state"] = ACCOUNT_OWNER_SOCIALS
                 await update.message.reply_text(
-                    "Enter phone number:",
-                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                    "Enter social media links (optional):",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [
+                            [KeyboardButton("➡ NEXT")],
+                            [KeyboardButton("🔙 BACK")]
+                        ],
+                        resize_keyboard=True
+                    )
                 )
                 return
 
@@ -767,6 +775,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         message = "✅ Account created successfully."
                     else:
                         message = "⏳ Account submitted. Waiting for admin approval."
+
+                    unlock_user(context, ACCOUNT_NONE)
 
                     await update.message.reply_text(
                         message,
@@ -1129,30 +1139,19 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await open_menu_for_role(update, context, role)
                 return
 
-            if "CONTINUE" in text:
+            if text not in ["➡ CONTINUE", "CONTINUE"]:
+                return
 
-                draft = context.user_data.setdefault("account_draft", {})
-                draft["duplicate_confirmed"] = True
+            draft = context.user_data.setdefault("account_draft", {})
+            draft["duplicate_confirmed"] = True
 
-                # if photo not yet sent → ask for photo
-                if not draft.get("photo_file_id"):
+            # if photo not yet sent → ask for photo
+            if not draft.get("photo_file_id"):
 
-                    context.user_data["account_state"] = ACCOUNT_PHOTO
-
-                    await update.message.reply_text(
-                        "📸 Now send a yard photo:",
-                        reply_markup=ReplyKeyboardMarkup(
-                            [[KeyboardButton("🔙 BACK")]],
-                            resize_keyboard=True
-                        )
-                    )
-                    return
-
-                # photo already exists → move forward
-                context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+                context.user_data["account_state"] = ACCOUNT_PHOTO
 
                 await update.message.reply_text(
-                    "Enter owner name:",
+                    "📸 Now send a yard photo:",
                     reply_markup=ReplyKeyboardMarkup(
                         [[KeyboardButton("🔙 BACK")]],
                         resize_keyboard=True
@@ -1160,6 +1159,16 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
+            # photo already exists → move forward
+            context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+
+            await update.message.reply_text(
+                "Enter owner name:",
+                reply_markup=ReplyKeyboardMarkup(
+                    [[KeyboardButton("🔙 BACK")]],
+                    resize_keyboard=True
+                )
+            )
             return
 
     # ================= ACCOUNTS (ADMIN + WORKERS) =================
