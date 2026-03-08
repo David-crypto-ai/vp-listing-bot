@@ -526,9 +526,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await update.message.reply_text(
                 f"Review account:\n"
-                f"Type: {draft['type']}\n"
-                f"Name: {draft['name']}\n"
-                f"Phone: {draft['phone']}\n"
+                f"Type: {draft.get('type','')}\n"
+                f"Name: {draft.get('name','')}\n"
+                f"Phone: {draft.get('phone','')}\n"
                 f"City/State: {draft.get('city','') + ', ' if draft.get('city') else ''}{draft.get('state','')}",
                 reply_markup=confirm_keyboard()
             )
@@ -860,9 +860,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 await update.message.reply_text(
                     f"Review account:\n"
-                    f"Type: {draft['type']}\n"
-                    f"Name: {draft['name']}\n"
-                    f"Phone: {draft['phone']}\n"
+                    f"Type: {draft.get('type','')}\n"
+                    f"Name: {draft.get('name','')}\n"
+                    f"Phone: {draft.get('phone','')}\n"
                     f"City/State: {draft.get('city','') + ', ' if draft.get('city') else ''}{draft.get('state','')}",
                     reply_markup=confirm_keyboard()
                 )
@@ -899,9 +899,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await update.message.reply_text(
                 f"Review account:\n"
-                f"Type: {draft['type']}\n"
-                f"Name: {draft['name']}\n"
-                f"Phone: {draft['phone']}\n"
+                f"Type: {draft.get('type','')}\n"
+                f"Name: {draft.get('name','')}\n"
+                f"Phone: {draft.get('phone','')}\n"
                 f"City/State: {draft.get('city','') + ', ' if draft.get('city') else ''}{draft.get('state','')}",
                 reply_markup=confirm_keyboard()
             )
@@ -1134,9 +1134,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                         await update.message.reply_text(
                             f"Review account:\n"
-                            f"Type: {draft['type']}\n"
-                            f"Name: {draft['name']}\n"
-                            f"Phone: {draft['phone']}\n"
+                            f"Type: {draft.get('type','')}\n"
+                            f"Name: {draft.get('name','')}\n"
+                            f"Phone: {draft.get('phone','')}\n"
                             f"City/State: {draft.get('city','') + ', ' if draft.get('city') else ''}{draft.get('state','')}",
                             reply_markup=confirm_keyboard()
                         )
