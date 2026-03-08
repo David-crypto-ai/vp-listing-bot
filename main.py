@@ -679,6 +679,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 log_line("MAPS_LINK", draft.get("maps_link"))
                 log_line("PHOTO_FILE_ID", draft.get("photo_file_id"))
                 log_line("UID", uid)
+                log_line("DISTANCE_WARNING", draft.get("distance_warning"))
+                log_line("DUPLICATE_MESSAGE", draft.get("duplicate_message"))
 
                 try:
                     if ENABLE_SHEETS:
@@ -952,6 +954,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     log_block("NEARBY SEARCH RESULT")
                     log_line("NEARBY_ROWS", nearby)
+
+                    if nearby:
+                        log_line("NEARBY_COUNT", len(nearby))
+                        log_line("FIRST_NEARBY_ROW", nearby[0])
+                    else:
+                        log_line("NEARBY_STATUS", "NO_NEARBY_RESULTS")
 
                     if nearby:
 
@@ -1311,10 +1319,18 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     city = r[10]
 
                     distance_warning = r[15] if len(r) > 15 else ""
+
+                    log_block("ADMIN DUPLICATE CHECK")
+                    log_line("ROW_LENGTH", len(r))
+                    log_line("RAW_DISTANCE_WARNING", distance_warning)
+
                     duplicate_message = ""
 
                     if distance_warning:
                         duplicate_message = f"\n\n⚠ Possible duplicate detected\n{distance_warning}"
+                        log_line("ADMIN_WARNING_DISPLAYED", duplicate_message)
+                    else:
+                        log_line("ADMIN_WARNING_DISPLAYED", "NONE")
 
                     caption = (
                         "🚨 NEW YARD SUBMISSION\n\n"
@@ -1367,9 +1383,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     owner_id
                                 )
 
-                                if owner_row and len(owner_row) >= 10:
+                                log_block("ADMIN OWNER LOOKUP")
+                                log_line("OWNER_ROW", owner_row)
 
-                                    existing_photo = owner_row[9]
+                                if owner_row and len(owner_row) >= 11:
+
+                                    existing_photo = owner_row[10]
 
                                     if existing_photo:
 
