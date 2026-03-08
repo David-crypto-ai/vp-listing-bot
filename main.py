@@ -44,6 +44,7 @@ ROLE_CACHE = {}
 ADMIN_CACHE = set()
 
 POSTPONED_OWNER_SUBMISSIONS = {}
+SECOND_BOT_WARNING_SHOWN = False
 
 async def get_cached_role(context, user_id):
     if user_id in ROLE_CACHE:
@@ -771,12 +772,16 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                                 if draft.get("photo_file_id"):
 
-                                    await context.bot.send_photo(
+                                    msg = await context.bot.send_photo(
                                         chat_id=admin,
                                         photo=draft["photo_file_id"],
                                         caption=caption,
                                         reply_markup=keyboard
                                     )
+
+                                    POSTPONED_OWNER_SUBMISSIONS[submission_id] = {
+                                        "main_msg": msg.message_id
+                                    }
 
                                 else:
 
@@ -1327,8 +1332,23 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     duplicate_message = ""
 
                     if distance_warning:
-                        duplicate_message = f"\n\n⚠ Possible duplicate detected\n{distance_warning}"
-                        log_line("ADMIN_WARNING_DISPLAYED", duplicate_message)
+
+                        parts = distance_warning.split("_OF_")
+
+                        if len(parts) == 2:
+                            meters = parts[0].replace("WITHIN_", "").replace("M", "")
+                            owner_id = parts[1]
+
+                            duplicate_message = (
+                                f"\n\n⚠ Possible duplicate yard detected\n"
+                                f"Distance: {meters} meters\n"
+                                f"Owner ID: {owner_id}"
+                            )
+
+                        else:
+                            duplicate_message = f"\n\n⚠ Possible duplicate\n{distance_warning}"
+
+                        log_line("ADMIN_WARNING_DISPLAYD", duplicate_message)
                     else:
                         log_line("ADMIN_WARNING_DISPLAYED", "NONE")
 
@@ -1395,7 +1415,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                         await context.bot.send_photo(
                                             chat_id=update.effective_chat.id,
                                             photo=existing_photo,
-                                            caption="Existing yard photo (possible duplicate)"
+                                            caption="⚠ Existing yard photo (possible duplicate)"
                                         )
 
                         except Exception as e:
@@ -1560,6 +1580,17 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
         await query.delete_message()
 
+        try:
+            data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
+
+            if data and data.get("main_msg"):
+                await context.bot.delete_message(
+                    chat_id=query.message.chat.id,
+                    message_id=data["main_msg"]
+                )
+        except:
+            pass
+
         # notify worker who submitted
         try:
             if worker_id:
@@ -1586,6 +1617,17 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
             log_line("ERROR", repr(e))
 
         await query.delete_message()
+
+        try:
+            data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
+
+            if data and data.get("main_msg"):
+                await context.bot.delete_message(
+                    chat_id=query.message.chat.id,
+                    message_id=data["main_msg"]
+                )
+        except:
+            pass
 
         # notify worker
         try:
@@ -1630,8 +1672,14 @@ app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
 
 async def error_handler(update, context):
 
+    global SECOND_BOT_WARNING_SHOWN
+
     if "terminated by other getUpdates request" in str(context.error):
-        print("⚠ Another bot instance is polling Telegram")
+
+        if not SECOND_BOT_WARNING_SHOWN:
+            print("⚠ Another bot instance is polling Telegram")
+            SECOND_BOT_WARNING_SHOWN = True
+
         return
 
     log_block("GLOBAL ERROR")
