@@ -424,6 +424,13 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if state == ACCOUNT_OWNER_NAME:
 
             if text in ["➡ CONTINUE", "CONTINUE"]:
+
+                context.user_data["account_state"] = ACCOUNT_OWNER_PHONE
+
+                await update.message.reply_text(
+                    "Enter phone number:",
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 BACK")]], resize_keyboard=True)
+                )
                 return
 
             if text in ["❌ CANCEL", "CANCEL"]:
@@ -1060,7 +1067,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
 
                 context.user_data["photo_continue_used"] = True
+
+                # move wizard forward
                 context.user_data["account_state"] = ACCOUNT_OWNER_NAME
+
+                # reset lag protection for next step
+                context.user_data.pop("photo_continue_used", None)
 
                 await update.message.reply_text(
                     "Enter owner name:",
@@ -1073,22 +1085,6 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
             if clean_text == "CANCEL":
-
-                if context.user_data.get("photo_continue_used"):
-                    return
-
-                context.user_data["photo_continue_used"] = True
-                clear_user_session(context)
-                await open_menu_for_role(update, context, role)
-                return
-
-                if context.user_data.get("photo_continue_used"):
-                    return
-
-                context.user_data["photo_continue_used"] = True
-                clear_user_session(context)
-                await open_menu_for_role(update, context, role)
-                return
 
             if text == "🔙 BACK":
                 context.user_data["account_state"] = ACCOUNT_LOCATION
