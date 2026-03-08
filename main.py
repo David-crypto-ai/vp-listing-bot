@@ -1086,6 +1086,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if clean_text == "CANCEL":
 
+                if context.user_data.get("photo_continue_used"):
+                    return
+
+                context.user_data["photo_continue_used"] = True
+                clear_user_session(context)
+                await open_menu_for_role(update, context, role)
+                return
+
+
             if text == "🔙 BACK":
                 context.user_data["account_state"] = ACCOUNT_LOCATION
                 keyboard = ReplyKeyboardMarkup(
