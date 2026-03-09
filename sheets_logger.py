@@ -432,6 +432,49 @@ def owners_recent_for_user(user_id: str, limit=10):
             break
     return out
 
+
+def get_worker_accounts(worker_id: str):
+
+    ws = owners_ws()
+
+    rows = ws.get_all_values()[1:]
+
+    # sort by LAST_CONTACTED_AT (recent first)
+    try:
+        rows.sort(key=lambda r: r[15] if len(r) > 15 else "", reverse=True)
+    except:
+        pass
+
+    results = []
+
+    for r in rows:
+
+        if len(r) < 12:
+            continue
+
+        owner_id = r[0]
+        owner_name = r[2]
+        created_by = r[11]
+        owner_status = r[12] if len(r) > 12 else ""
+
+        if created_by == str(worker_id) and owner_status == "APPROVED":
+
+            results.append({
+                "owner_id": owner_id,
+                "owner_name": owner_name
+            })
+
+    return results
+    ws = owners_ws()
+    rows = ws.get_all_values()[1:]
+    out = []
+    for r in reversed(rows):
+        if len(r) > 10 and r[10] == str(user_id):
+            out.append(r)
+        if len(out) >= limit:
+            break
+    return out
+
 # ---------------- ITEMS ----------------
 
 def next_item_id():

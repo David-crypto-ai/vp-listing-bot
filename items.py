@@ -1,6 +1,7 @@
 from telegram import ReplyKeyboardMarkup, KeyboardButton
-from sheets_logger import create_draft, update_item_fields
+ffrom sheets_logger import create_draft, update_item_fields, get_worker_accounts
 from utils import safe_text
+
 
 # ================= ITEM STATES =================
 
@@ -25,11 +26,44 @@ def items_menu():
     )
 
 
+def wizard_back_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("🔙 BACK")]
+        ],
+        resize_keyboard=True
+    )
+
+
 def confirm_keyboard():
     return ReplyKeyboardMarkup(
         [
             [KeyboardButton("✅ SAVE ITEM")],
-            [KeyboardButton("❌ CANCEL")]
+            [KeyboardButton("❌ CANCEL")],
+            [KeyboardButton("🔙 BACK")]
+        ],
+        resize_keyboard=True
+    )
+
+
+def owner_select_keyboard(accounts):
+
+    rows = []
+
+    for acc in accounts:
+
+        label = f"{acc['owner_name']} ({acc['owner_id']})"
+
+        rows.append([KeyboardButton(label)])
+
+    rows.append([KeyboardButton("🔙 BACK")])
+
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("✅ SAVE ITEM")],
+            [KeyboardButton("❌ CANCEL")],
+            [KeyboardButton("🔙 BACK")]
         ],
         resize_keyboard=True
     )
@@ -56,16 +90,30 @@ async def handle_items_panel(update, context, text, role, status):
     # ---------------- NEW ITEM ----------------
     if text == "📦 NEW ITEM" and status == "ACTIVE":
 
+        accounts = get_worker_accounts(uid)
+
+        if not accounts:
+
+            await update.message.reply_text(
+                "No accounts found. Please create an account first."
+            )
+
+            return True
+
         context.user_data["item_state"] = ITEM_OWNER
         context.user_data["item_draft"] = {
             "photos": []
         }
 
+        context.user_data["owner_accounts"] = accounts
+
         await update.message.reply_text(
-            "Enter OWNER_ID for this truck:"
+            "Select owner for this item:",
+            reply_markup=owner_select_keyboard(accounts)
         )
 
         return True
+
 
     # ================= ITEM WIZARD =================
 
@@ -76,48 +124,70 @@ async def handle_items_panel(update, context, text, role, status):
 
     draft = context.user_data.get("item_draft", {})
 
-    # ---------- OWNER ----------
+
+    # =================================================
+    # OWNER STEP
+    # =================================================
     if state == ITEM_OWNER:
 
-        if text == "❌ CANCEL":
+        if text == "🔙 BACK":
+
             context.user_data["item_state"] = ITEM_NONE
             context.user_data.pop("item_draft", None)
 
             await update.message.reply_text(
-                "Item creation cancelled.",
+                "Back to items menu.",
                 reply_markup=items_menu()
             )
+
             return True
 
-        draft["owner_id"] = safe_text(text)
+        accounts = context.user_data.get("owner_accounts", [])
+
+        selected_owner = None
+
+        for acc in accounts:
+
+            label = f"{acc['owner_name']} ({acc['owner_id']})"
+
+            if text == label:
+                selected_owner = acc
+                break
+
+        if not selected_owner:
+
+            await update.message.reply_text(
+                "Please select an owner from the list."
+            )
+
+            return True
+
+        draft["owner_id"] = selected_owner["owner_id"]
 
         context.user_data["item_state"] = ITEM_PHOTOS
 
         await update.message.reply_text(
-            "Send truck photos.\n\nSend one photo at a time.\nPress DONE when finished.",
-            reply_markup=ReplyKeyboardMarkup(
-                [
-                    [KeyboardButton("DONE")],
-                    [KeyboardButton("❌ CANCEL")]
-                ],
-                resize_keyboard=True
-            )
+            "Send truck photos.\n\nSend one photo at a time.\nType DONE when finished.",
+            reply_markup=wizard_back_keyboard()
         )
 
         return True
 
-    # ---------- PHOTOS ----------
+
+    # =================================================
+    # PHOTO STEP
+    # =================================================
     if state == ITEM_PHOTOS:
 
-        if text == "❌ CANCEL":
+        if text == "🔙 BACK":
 
-            context.user_data["item_state"] = ITEM_NONE
-            context.user_data.pop("item_draft", None)
+            context.user_data["item_state"] = ITEM_OWNER
 
             await update.message.reply_text(
-                "Item creation cancelled.",
-                reply_markup=items_menu()
+                "Select owner for this item:",
+                reply_markup=wizard_back_keyboard()
             )
+
             return True
 
         if text == "DONE":
@@ -131,7 +201,8 @@ async def handle_items_panel(update, context, text, role, status):
             context.user_data["item_state"] = ITEM_CAPTION
 
             await update.message.reply_text(
-                "Send truck description or caption."
+                "Send truck description or caption:",
+                reply_markup=wizard_back_keyboard()
             )
 
             return True
@@ -139,6 +210,7 @@ async def handle_items_panel(update, context, text, role, status):
         if update.message.photo:
 
             photo = update.message.photo[-1]
+
             draft["photos"].append(photo.file_id)
 
             await update.message.reply_text(
@@ -149,18 +221,21 @@ async def handle_items_panel(update, context, text, role, status):
 
         return True
 
-    # ---------- CAPTION ----------
+
+    # =================================================
+    # CAPTION STEP
+    # =================================================
     if state == ITEM_CAPTION:
 
-        if text == "❌ CANCEL":
+        if text == "🔙 BACK":
 
-            context.user_data["item_state"] = ITEM_NONE
-            context.user_data.pop("item_draft", None)
+            context.user_data["item_state"] = ITEM_PHOTOS
 
             await update.message.reply_text(
-                "Item creation cancelled.",
-                reply_markup=items_menu()
+                "Send truck photos again.\nType DONE when finished.",
+                reply_markup=wizard_back_keyboard()
             )
+
             return True
 
         draft["caption"] = safe_text(text)
@@ -168,23 +243,27 @@ async def handle_items_panel(update, context, text, role, status):
         context.user_data["item_state"] = ITEM_OWNER_PRICE
 
         await update.message.reply_text(
-            "Enter owner price:"
+            "Enter owner price:",
+            reply_markup=wizard_back_keyboard()
         )
 
         return True
 
-    # ---------- OWNER PRICE ----------
+
+    # =================================================
+    # OWNER PRICE STEP
+    # =================================================
     if state == ITEM_OWNER_PRICE:
 
-        if text == "❌ CANCEL":
+        if text == "🔙 BACK":
 
-            context.user_data["item_state"] = ITEM_NONE
-            context.user_data.pop("item_draft", None)
+            context.user_data["item_state"] = ITEM_CAPTION
 
             await update.message.reply_text(
-                "Item creation cancelled.",
-                reply_markup=items_menu()
+                "Send description again:",
+                reply_markup=wizard_back_keyboard()
             )
+
             return True
 
         draft["owner_price"] = safe_text(text)
@@ -196,7 +275,7 @@ async def handle_items_panel(update, context, text, role, status):
 Review Item
 
 Owner ID: {draft.get("owner_id")}
-Photos: {len(draft.get("photos",[]))}
+Photos: {len(draft.get("photos", []))}
 Owner Price: {draft.get("owner_price")}
 
 Save item?
@@ -206,8 +285,22 @@ Save item?
 
         return True
 
-    # ---------- CONFIRM ----------
+
+    # =================================================
+    # CONFIRM STEP
+    # =================================================
     if state == ITEM_CONFIRM:
+
+        if text == "🔙 BACK":
+
+            context.user_data["item_state"] = ITEM_OWNER_PRICE
+
+            await update.message.reply_text(
+                "Enter owner price again:",
+                reply_markup=wizard_back_keyboard()
+            )
+
+            return True
 
         if text == "❌ CANCEL":
 
@@ -218,6 +311,7 @@ Save item?
                 "Item creation cancelled.",
                 reply_markup=items_menu()
             )
+
             return True
 
         if text == "✅ SAVE ITEM":
@@ -238,6 +332,19 @@ Save item?
                 }
             )
 
+            # update owner recent usage timestamp
+            from sheets_logger import owners_ws
+
+            ws = owners_ws()
+            rows = ws.get_all_values()
+
+            for i, r in enumerate(rows[1:], start=2):
+
+                if r and r[0] == draft.get("owner_id"):
+
+                    ws.update_cell(i, 16, now_str())
+                    break
+
             context.user_data["item_state"] = ITEM_NONE
             context.user_data.pop("item_draft", None)
 
@@ -249,5 +356,6 @@ Save item?
             return True
 
         return True
+
 
     return False
