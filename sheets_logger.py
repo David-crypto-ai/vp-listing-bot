@@ -657,7 +657,13 @@ def get_pending_owner_submissions():
     pending = []
 
     for r in rows:
-        if len(r) > 13 and r[13] == "PENDING":
+
+        if len(r) <= 13:
+            continue
+
+        status = r[13].strip().upper()
+
+        if status == "PENDING":
             pending.append(r)
 
     return pending
@@ -673,7 +679,7 @@ def reject_owner_submission(submission_id):
 
         if r[0] == submission_id:
 
-            status = r[13]
+            status = r[13].strip().upper()
 
             if status != "PENDING":
                 return False

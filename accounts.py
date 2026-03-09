@@ -1302,6 +1302,19 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     get_pending_owner_submissions
                 )
 
+                log_block("PENDING ACCOUNTS LOAD")
+
+                if not rows:
+                    rows = []
+
+                log_line("ROWS_RETURNED", len(rows))
+
+                try:
+                    ids = [str(r[0]) for r in rows]
+                    log_line("SUBMISSION_IDS", ", ".join(ids) if ids else "NONE")
+                except Exception as e:
+                    log_line("ID_PARSE_ERROR", repr(e))
+
                 if not rows:
                     await update.message.reply_text("No pending owner submissions.")
                     return
@@ -1315,6 +1328,11 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for r in rows:
 
                     submission_id = r[0]
+
+                    # skip submissions already reviewed in this session
+                    if submission_id in POSTPONED_OWNER_SUBMISSIONS:
+                        continue
+
                     worker_id = r[1]
 
                     coords = r[3]
