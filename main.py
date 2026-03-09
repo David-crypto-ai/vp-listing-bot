@@ -12,8 +12,7 @@ from telegram.error import Conflict
 from accounts import (
     start_button,
     route_message,
-    callback_router,
-    error_handler
+    callback_router
 )
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
@@ -48,8 +47,6 @@ app.add_handler(CommandHandler("start", start_button), group=0)
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
 
 app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
-
-app.add_error_handler(error_handler)
 
 # ================= TELEGRAM POLLING =================
 
