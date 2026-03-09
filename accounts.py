@@ -1480,6 +1480,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
 
                     POSTPONED_OWNER_SUBMISSIONS[submission_id] = {
+                        "chat_id": update.effective_chat.id,
                         "main_msg": main_msg.message_id,
                         "media_msgs": media_ids
                     }
@@ -1617,22 +1618,11 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
             log_block("OWNER APPROVE ERROR")
             log_line("ERROR", repr(e))
 
-        try:
-            await query.delete_message()
-        except:
-            pass
-
         data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
 
         if data and isinstance(data, dict):
 
             try:
-
-                if "main_msg" in data:
-                    await context.bot.delete_message(
-                        chat_id=query.message.chat.id,
-                        message_id=data["main_msg"]
-                    )
 
                 if "media_msgs" in data:
                     for mid in data["media_msgs"]:
@@ -1644,8 +1634,19 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
                         except:
                             pass
 
+                if "main_msg" in data:
+                    await context.bot.delete_message(
+                        chat_id=query.message.chat.id,
+                        message_id=data["main_msg"]
+                    )
+
             except Exception as e:
                 log_line("DELETE_MAIN_MSG_ERROR", repr(e))
+
+        try:
+            await query.delete_message()
+        except:
+            pass
 
         POSTPONED_OWNER_SUBMISSIONS[submission_id] = "REVIEWED"
 
@@ -1680,22 +1681,11 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
             log_block("OWNER REJECT ERROR")
             log_line("ERROR", repr(e))
 
-        try:
-            await query.delete_message()
-        except:
-            pass
-
         data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
 
         if data and isinstance(data, dict):
 
             try:
-
-                if "main_msg" in data:
-                    await context.bot.delete_message(
-                        chat_id=query.message.chat.id,
-                        message_id=data["main_msg"]
-                    )
 
                 if "media_msgs" in data:
                     for mid in data["media_msgs"]:
@@ -1707,8 +1697,19 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
                         except:
                             pass
 
+                if "main_msg" in data:
+                    await context.bot.delete_message(
+                        chat_id=query.message.chat.id,
+                        message_id=data["main_msg"]
+                    )
+
             except Exception as e:
                 log_line("DELETE_MAIN_MSG_ERROR", repr(e))
+
+        try:
+            await query.delete_message()
+        except:
+            pass
 
         POSTPONED_OWNER_SUBMISSIONS[submission_id] = "REVIEWED"
 
