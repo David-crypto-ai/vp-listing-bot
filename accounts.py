@@ -320,10 +320,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     last = USER_RATE_LIMIT.get(uid)
 
-    if last and now - last < RATE_LIMIT_SECONDS:
-        return
+    # allow BACK button to bypass rate limiter
+    if btn != "BACK":
+        if last and now - last < RATE_LIMIT_SECONDS:
+            return
 
-    USER_RATE_LIMIT[uid] = now
+        USER_RATE_LIMIT[uid] = now
 
     # session warm-start after approval (VERY IMPORTANT FIRST)
     forced = context.application.bot_data.get("force_role_cache", {}).pop(str(user.id), None)
@@ -331,7 +333,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ROLE_CACHE[str(user.id)] = forced
 
     # allow known approved users even if cache restarted
-    role, status = await get_cached_role(context, uid)
+    # if wizard active, avoid Google Sheets lookup
+    if context.user_data.get("account_state", ACCOUNT_NONE) != ACCOUNT_NONE:
+        role = context.user_data.get("cached_role")
+        status = "ACTIVE"
+    else:
+        role, status = await get_cached_role(context, uid)
 
     # ===== AUTO SESSION RECOVERY (CRITICAL) =====
     state = context.user_data.get("account_state", ACCOUNT_NONE)
