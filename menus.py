@@ -80,11 +80,9 @@ def accounts_menu():
 def admin_main_menu():
     return kb([
         [PANEL_ITEMS, PANEL_ACCOUNTS],
-        [PANEL_WORKFLOW],
+        [PANEL_WORKFLOW, PANEL_REPORTS],
         [PANEL_USERS, PANEL_TASKS],
-        [PANEL_REPORTS],
-        [PANEL_SYSTEM],
-        [PANEL_BACK]
+        [PANEL_SYSTEM, PANEL_BACK]
     ])
 
 # =============================
