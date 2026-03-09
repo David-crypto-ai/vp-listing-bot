@@ -1274,14 +1274,11 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 await update.message.reply_text(
                     "📋 Pending Account Submissions\n"
-                    "--------------------------------"
+                    "Review order:\n"
+                    "SUBMISSION → PHOTO → EXISTING PHOTO → MAP"
                 )
 
                 for r in rows:
-
-                    await update.message.reply_text(
-                        "--------------------------------"
-                    )
 
                     submission_id = r[0]
                     worker_id = r[1]
@@ -1303,6 +1300,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     log_line("RAW_DISTANCE_WARNING", distance_warning)
 
                     duplicate_message = ""
+                    owner_id = ""
 
                     if distance_warning:
 
@@ -1313,20 +1311,22 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             owner_id = parts[1]
 
                             duplicate_message = (
-                                f"\n\n⚠ Possible duplicate yard detected\n"
-                                f"Distance: {meters} meters\n"
-                                f"Owner ID: {owner_id}"
+                                f"\n⚠ Possible duplicate yard detected"
+                                f"\nDistance: {meters} meters"
+                                f"\nOwner ID: {owner_id}"
                             )
 
                         else:
-                            duplicate_message = f"\n\n⚠ Possible duplicate\n{distance_warning}"
+                            duplicate_message = f"\n⚠ Possible duplicate\n{distance_warning}"
 
-                        log_line("ADMIN_WARNING_DISPLAYD", duplicate_message)
+                        log_line("ADMIN_WARNING_DISPLAYED", duplicate_message)
                     else:
                         log_line("ADMIN_WARNING_DISPLAYED", "NONE")
 
                     caption = (
-                        "🚨 NEW YARD SUBMISSION\n\n"
+                        "━━━━━━━━━━━━━━━━━━━━\n"
+                        "📥 SUBMISSION REVIEW\n"
+                        "━━━━━━━━━━━━━━━━━━━━\n"
                         f"Submission ID: {submission_id}\n"
                         f"👤 Name: {name}\n"
                         f"📞 Phone: {phone}\n"
@@ -1335,7 +1335,11 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"📍 City: {city}\n"
                         f"🗺 Maps: {maps_link}\n"
                         f"🆔 Finder ID: {worker_id}"
-                        f"{duplicate_message}"
+                        f"{duplicate_message}\n\n"
+                        "Next messages below:\n"
+                        "1) submitted photo\n"
+                        "2) existing photo (if duplicate)\n"
+                        "3) map pin"
                     )
 
                     keyboard = InlineKeyboardMarkup([
@@ -1346,65 +1350,71 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ])
 
                     if photo:
-                        await context.bot.send_photo(
+                        main_msg = await context.bot.send_photo(
                             chat_id=update.effective_chat.id,
                             photo=photo,
                             caption=caption,
                             reply_markup=keyboard
                         )
                     else:
-                        await update.message.reply_text(
+                        main_msg = await update.message.reply_text(
                             caption,
                             reply_markup=keyboard
                         )
 
-                    # ----- SHOW EXISTING DUPLICATE PHOTO TO ADMIN -----
-                    if distance_warning:
+                    POSTPONED_OWNER_SUBMISSIONS[submission_id] = {
+                        "main_msg": main_msg.message_id,
+                        "dup_photo": None,
+                        "location_msg": None
+                    }
+
+                    if distance_warning and owner_id:
 
                         try:
+                            from sheets_logger import get_owner_by_id
 
-                            parts = distance_warning.split("_OF_")
+                            owner_row = await run_sheet(
+                                context,
+                                get_owner_by_id,
+                                owner_id
+                            )
 
-                            if len(parts) == 2:
-                                owner_id = parts[1]
+                            log_block("ADMIN OWNER LOOKUP")
+                            log_line("OWNER_ROW", owner_row)
 
-                                from sheets_logger import get_owner_by_id
+                            if owner_row and len(owner_row) >= 11:
 
-                                owner_row = await run_sheet(
-                                    context,
-                                    get_owner_by_id,
-                                    owner_id
-                                )
+                                existing_photo = owner_row[10]
 
-                                log_block("ADMIN OWNER LOOKUP")
-                                log_line("OWNER_ROW", owner_row)
+                                if existing_photo:
 
-                                if owner_row and len(owner_row) >= 11:
+                                    dup_msg = await context.bot.send_photo(
+                                        chat_id=update.effective_chat.id,
+                                        photo=existing_photo,
+                                        caption="📌 EXISTING PHOTO\nPossible duplicate comparison"
+                                    )
 
-                                    existing_photo = owner_row[10]
-
-                                    if existing_photo:
-
-                                        await context.bot.send_photo(
-                                            chat_id=update.effective_chat.id,
-                                            photo=existing_photo,
-                                            caption="⚠ Existing yard photo (possible duplicate)"
-                                        )
+                                    if submission_id in POSTPONED_OWNER_SUBMISSIONS:
+                                        POSTPONED_OWNER_SUBMISSIONS[submission_id]["dup_photo"] = dup_msg.message_id
 
                         except Exception as e:
                             log_block("ADMIN DUPLICATE PHOTO ERROR")
                             log_line("ERROR", repr(e))
 
-                    if coords:
+                    if coords and "," in coords:
                         try:
                             lat, lon = map(float, coords.split(","))
-                            await context.bot.send_location(
+                            loc_msg = await context.bot.send_location(
                                 chat_id=update.effective_chat.id,
                                 latitude=lat,
                                 longitude=lon
                             )
-                        except:
-                            pass
+
+                            if submission_id in POSTPONED_OWNER_SUBMISSIONS:
+                                POSTPONED_OWNER_SUBMISSIONS[submission_id]["location_msg"] = loc_msg.message_id
+                        except Exception as e:
+                            log_block("ADMIN LOCATION SEND ERROR")
+                            log_line("ERROR", repr(e))
 
             except Exception as e:
                 log_block("PENDING LOAD ERROR")
@@ -1436,23 +1446,15 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 keyboard = InlineKeyboardMarkup([
                     [
-                        InlineKeyboardButton("✅ APPROVE", callback_data=f"OWNER_APPROVE|{sid}"),
-                        InlineKeyboardButton("❌ REJECT", callback_data=f"OWNER_REJECT|{sid}")
+                        InlineKeyboardButton("✅ APPROVE", callback_data=f"OWNER_APPROVE|{sid}|0"),
+                        InlineKeyboardButton("❌ REJECT", callback_data=f"OWNER_REJECT|{sid}|0")
                     ]
                 ])
 
-                if data["photo"]:
-                    await context.bot.send_photo(
-                        chat_id=update.effective_chat.id,
-                        photo=data["photo"],
-                        caption=f"⏳ Postponed Submission\nSubmission ID: {sid}",
-                        reply_markup=keyboard
-                    )
-                else:
-                    await update.message.reply_text(
-                        f"⏳ Postponed Submission {sid}",
-                        reply_markup=keyboard
-                    )
+                await update.message.reply_text(
+                    f"⏳ Postponed Submission\nSubmission ID: {sid}",
+                    reply_markup=keyboard
+                )
 
             return
 
@@ -1556,11 +1558,26 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
 
-            if data and data.get("main_msg"):
-                await context.bot.delete_message(
-                    chat_id=query.message.chat.id,
-                    message_id=data["main_msg"]
-                )
+            if data:
+
+                if data.get("main_msg"):
+                    await context.bot.delete_message(
+                        chat_id=query.message.chat.id,
+                        message_id=data["main_msg"]
+                    )
+
+                if data.get("dup_photo"):
+                    await context.bot.delete_message(
+                        chat_id=query.message.chat.id,
+                        message_id=data["dup_photo"]
+                    )
+
+                if data.get("location_msg"):
+                    await context.bot.delete_message(
+                        chat_id=query.message.chat.id,
+                        message_id=data["location_msg"]
+                    )
+
         except:
             pass
 
@@ -1594,11 +1611,26 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
 
-            if data and data.get("main_msg"):
-                await context.bot.delete_message(
-                    chat_id=query.message.chat.id,
-                    message_id=data["main_msg"]
-                )
+            if data:
+
+                if data.get("main_msg"):
+                    await context.bot.delete_message(
+                        chat_id=query.message.chat.id,
+                        message_id=data["main_msg"]
+                    )
+
+                if data.get("dup_photo"):
+                    await context.bot.delete_message(
+                        chat_id=query.message.chat.id,
+                        message_id=data["dup_photo"]
+                    )
+
+                if data.get("location_msg"):
+                    await context.bot.delete_message(
+                        chat_id=query.message.chat.id,
+                        message_id=data["location_msg"]
+                    )
+
         except:
             pass
 
