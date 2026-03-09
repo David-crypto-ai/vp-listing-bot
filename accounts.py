@@ -362,8 +362,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "➕ ADD ACCOUNT",
             "👤 MY ACCOUNTS",
             "📍 NEARBY ACCOUNTS",
-            "🔎 SEARCH ACCOUNT",
-            BTN_PENDING_ACCOUNTS
+            "🔎 SEARCH ACCOUNT"
         ]:
             await open_menu_for_role(update, context, role)
             return
@@ -1234,6 +1233,10 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+    # ================= GLOBAL BACK BUTTON =================
+    if text == PANEL_BACK:
+        await open_menu_for_role(update, context, role)
+        return
     # ================= ITEMS PANEL =================
     handled = await handle_items_panel(update, context, text, role, status)
 
