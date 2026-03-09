@@ -1043,6 +1043,23 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # ---- CONTINUE ----
             if btn == "CONTINUE":
 
+                draft = context.user_data.setdefault("account_draft", {})
+
+                # if duplicate warning exists → go to duplicate confirmation
+                if draft.get("distance_warning") and not draft.get("duplicate_confirmed"):
+                    context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
+                    await update.message.reply_text(
+                        "Possible duplicate yard detected.\nContinue anyway?",
+                        reply_markup=ReplyKeyboardMarkup(
+                            [
+                                [KeyboardButton("➡ CONTINUE")],
+                                [KeyboardButton("❌ CANCEL")]
+                            ],
+                            resize_keyboard=True
+                        )
+                    )
+                    return
+
                 context.user_data["account_state"] = ACCOUNT_OWNER_NAME
 
                 await update.message.reply_text(
@@ -1117,8 +1134,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                     return
 
-                if draft.get("distance_warning"):
-                    context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
+                #if draft.get("distance_warning"):
+                    #context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
 
                 if draft.get("distance_warning"):
 
