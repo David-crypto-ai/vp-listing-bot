@@ -63,15 +63,21 @@ def start_keyboard():
 # =============================
 # ACCOUNTS MENU
 # =============================
-def accounts_menu():
-    return kb([
+def accounts_menu(role=None):
+
+    rows = [
         [BTN_ADD_ACCOUNT],
         [BTN_MY_ACCOUNTS],
         [BTN_NEARBY_ACCOUNTS],
         [BTN_SEARCH_ACCOUNT],
-        [BTN_PENDING_ACCOUNTS],
-        [PANEL_BACK],
-    ])
+    ]
+
+    if role == "ADMIN":
+        rows.append([BTN_PENDING_ACCOUNTS])
+
+    rows.append([PANEL_BACK])
+
+    return kb(rows)
 
 
 # =============================

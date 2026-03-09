@@ -365,6 +365,22 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔎 SEARCH ACCOUNT"
         ]:
             await open_menu_for_role(update, context, role)
+            return        if text not in [
+            PANEL_ACCOUNTS,
+            PANEL_ITEMS,
+            PANEL_WORKFLOW,
+            PANEL_USERS,
+            PANEL_TASKS,
+            PANEL_REPORTS,
+            PANEL_SYSTEM,
+            PANEL_BACK,
+            "➕ ADD ACCOUNT",
+            "👤 MY ACCOUNTS",
+            "📍 NEARBY ACCOUNTS",
+            "🔎 SEARCH ACCOUNT",
+            BTN_PENDING_ACCOUNTS
+        ]:
+            await open_menu_for_role(update, context, role)
             return
 
     # PENDING USERS → always inform
@@ -1248,7 +1264,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             "Accounts Menu",
-            reply_markup=accounts_menu()
+            reply_markup=accounts_menu(role)
         )
         return
 
@@ -1507,7 +1523,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text == PANEL_ACCOUNTS:
             await update.message.reply_text(
                 "Accounts Menu",
-                reply_markup=accounts_menu()
+                reply_markup=accounts_menu(role)
             )
             return
 
