@@ -1558,31 +1558,36 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
         except:
             pass
 
-        try:
-            data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
+        data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
 
-            if data:
+        if data:
 
-                if data.get("main_msg"):
+            if data.get("main_msg"):
+                try:
                     await context.bot.delete_message(
                         chat_id=query.message.chat.id,
                         message_id=data["main_msg"]
                     )
+                except Exception as e:
+                    log_line("DELETE_MAIN_MSG_ERROR", repr(e))
 
-                if data.get("dup_photo"):
+            if data.get("dup_photo"):
+                try:
                     await context.bot.delete_message(
                         chat_id=query.message.chat.id,
                         message_id=data["dup_photo"]
                     )
+                except Exception as e:
+                    log_line("DELETE_DUP_PHOTO_ERROR", repr(e))
 
-                if data.get("location_msg"):
+            if data.get("location_msg"):
+                try:
                     await context.bot.delete_message(
                         chat_id=query.message.chat.id,
                         message_id=data["location_msg"]
                     )
-
-        except:
-            pass
+                except Exception as e:
+                    log_line("DELETE_LOCATION_ERROR", repr(e))
 
         # notify worker who submitted
         try:
@@ -1614,31 +1619,36 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
         except:
             pass
 
-        try:
-            data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
+        data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
 
-            if data:
+        if data:
 
-                if data.get("main_msg"):
+            if data.get("main_msg"):
+                try:
                     await context.bot.delete_message(
                         chat_id=query.message.chat.id,
                         message_id=data["main_msg"]
                     )
+                except Exception as e:
+                    log_line("DELETE_MAIN_MSG_ERROR", repr(e))
 
-                if data.get("dup_photo"):
+            if data.get("dup_photo"):
+                try:
                     await context.bot.delete_message(
                         chat_id=query.message.chat.id,
                         message_id=data["dup_photo"]
                     )
+                except Exception as e:
+                    log_line("DELETE_DUP_PHOTO_ERROR", repr(e))
 
-                if data.get("location_msg"):
+            if data.get("location_msg"):
+                try:
                     await context.bot.delete_message(
                         chat_id=query.message.chat.id,
                         message_id=data["location_msg"]
                     )
-
-        except:
-            pass
+                except Exception as e:
+                    log_line("DELETE_LOCATION_ERROR", repr(e))
 
         # notify worker
         try:
