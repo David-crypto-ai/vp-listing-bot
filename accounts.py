@@ -363,7 +363,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "👤 MY ACCOUNTS",
             "📍 NEARBY ACCOUNTS",
             "🔎 SEARCH ACCOUNT",
-            BTN_PENDING_ACCOUNTS
+            BTN_PENDING_ACCOUNTS,
             PANEL_BACK
         ]:
             await open_menu_for_role(update, context, role)
