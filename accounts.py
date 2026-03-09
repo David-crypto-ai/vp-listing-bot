@@ -288,6 +288,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # capture message text safely (buttons, captions, etc)
     raw_text = update.message.text or update.message.caption or ""
 
+    # detect photos early (important for item uploads)
+    has_photo = bool(update.message.photo)
+
     # normalized button version (safe for comparisons)
     btn = (
         raw_text.upper()
@@ -303,6 +306,10 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # keep raw text for real user input
     text = raw_text.strip()
+
+    # prevent router from resetting menu when photo is sent
+    if has_photo:
+        text = "__PHOTO__"
 
     log_block("BUTTON DEBUG")
     log_line("RAW_TEXT", raw_text)
@@ -349,7 +356,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # always refresh role menu after updates
         context.user_data["cached_role"] = role
 
-        # if user pressed something unknown or menu button → reload latest menu
+        # allow ITEM buttons to pass through router
         if text not in [
             PANEL_ACCOUNTS,
             PANEL_ITEMS,
@@ -359,12 +366,13 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             PANEL_REPORTS,
             PANEL_SYSTEM,
             PANEL_BACK,
+            "📦 NEW ITEM",
+            "🗂️ MY ITEMS",
             "➕ ADD ACCOUNT",
             "👤 MY ACCOUNTS",
             "📍 NEARBY ACCOUNTS",
             "🔎 SEARCH ACCOUNT",
-            BTN_PENDING_ACCOUNTS,
-            PANEL_BACK
+            BTN_PENDING_ACCOUNTS
         ]:
             await open_menu_for_role(update, context, role)
             return
