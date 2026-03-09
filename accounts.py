@@ -926,13 +926,14 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if draft.get("duplicate_checked"):
                         nearby = []
                     else:
+                        draft["duplicate_checked"] = True
+
                         nearby = await run_sheet(
                             context,
                             check_nearby_accounts,
                             loc.latitude,
                             loc.longitude
                         )
-                        draft["duplicate_checked"] = True
 
                     log_block("NEARBY SEARCH RESULT")
                     log_line("NEARBY_ROWS", nearby)
@@ -995,10 +996,12 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     "⚠ Existing yard photo not found."
                                 )
 
-                            context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
+                            draft["duplicate_pending"] = True
 
                             await update.message.reply_text(
-                                "Compare the location in front of you with the saved yard photo.\n\nContinue anyway?",
+                                "⚠ Possible duplicate yard detected.\n"
+                                "Compare the location with the saved yard photo.\n\n"
+                                "Continue anyway?",
                                 reply_markup=ReplyKeyboardMarkup(
                                     [
                                         [KeyboardButton("➡ CONTINUE")],
@@ -1007,6 +1010,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     resize_keyboard=True
                                 )
                             )
+
+                            context.user_data["account_state"] = ACCOUNT_PHOTO
                             return
 
                         except Exception as e:
@@ -1046,7 +1051,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 draft = context.user_data.setdefault("account_draft", {})
 
                 # if duplicate warning exists → go to duplicate confirmation
-                if draft.get("distance_warning") and not draft.get("duplicate_confirmed"):
+                if draft.get("duplicate_pending") and not draft.get("duplicate_confirmed"):
                     context.user_data["account_state"] = ACCOUNT_DUPLICATE_CHECK
                     await update.message.reply_text(
                         "Possible duplicate yard detected.\nContinue anyway?",
@@ -1192,6 +1197,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             draft = context.user_data.setdefault("account_draft", {})
             draft["duplicate_confirmed"] = True
+            draft["duplicate_pending"] = False
 
             # if photo not yet sent → ask for photo
             if not draft.get("photo_file_id"):
