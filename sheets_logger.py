@@ -607,10 +607,12 @@ def approve_owner_submission(submission_id):
 
         if r[0] == submission_id:
 
-            # ===== SAFETY LOCK =====
-            status = r[13]
+            status = r[13].strip().upper()
+
+            print("[SHEETS DEBUG] APPROVE CHECK:", submission_id, "STATUS:", status)
 
             if status != "PENDING":
+                print("[SHEETS DEBUG] APPROVE BLOCKED — already processed")
                 return None
 
             # mark processing immediately
@@ -652,19 +654,26 @@ def get_pending_owner_submissions():
     ss = _client().open_by_key(SPREADSHEET_ID)
     ws = ss.worksheet("OWNER_SUBMISSIONS")
 
-    rows = ws.get_all_values()[1:]
+    rows = ws.get("A2:P")
 
     pending = []
 
     for r in rows:
+
+        if not r:
+            continue
 
         if len(r) <= 13:
             continue
 
         status = r[13].strip().upper()
 
+        print("[SHEETS DEBUG] ROW STATUS:", r[0], status)
+
         if status == "PENDING":
             pending.append(r)
+
+    print("[SHEETS DEBUG] TOTAL PENDING:", len(pending))
 
     return pending
 
@@ -681,10 +690,18 @@ def reject_owner_submission(submission_id):
 
             status = r[13].strip().upper()
 
+            print("[SHEETS DEBUG] REJECT CHECK:", submission_id, "STATUS:", status)
+
             if status != "PENDING":
+                print("[SHEETS DEBUG] REJECT BLOCKED — already processed")
                 return False
 
             ws.update_cell(i, 13, "REJECTED")
+
+            print("[SHEETS DEBUG] REJECT SUCCESS:", submission_id)
+
             return True
+
+    print("[SHEETS DEBUG] REJECT FAILED — submission not found:", submission_id)
 
     return False

@@ -1302,6 +1302,14 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     get_pending_owner_submissions
                 )
 
+                log_block("PENDING LOAD DEBUG")
+
+                try:
+                    for r in rows:
+                        log_line("ROW_STATUS", r[13] if len(r) > 13 else "NO_STATUS")
+                except Exception as e:
+                    log_line("STATUS_PARSE_ERROR", repr(e))
+
                 log_block("PENDING ACCOUNTS LOAD")
 
                 if not rows:
@@ -1331,6 +1339,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # skip submissions already reviewed in this session
                     if submission_id in POSTPONED_OWNER_SUBMISSIONS:
+                        log_line("SKIP_ALREADY_REVIEWED", submission_id)
                         continue
 
                     worker_id = r[1]
@@ -1606,6 +1615,7 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
         except:
             pass
 
+        POSTPONED_OWNER_SUBMISSIONS[submission_id] = "REVIEWED"
         data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
 
         if data:
@@ -1652,11 +1662,17 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
         try:
             if ENABLE_SHEETS:
-                await run_sheet(
+
+                log_block("OWNER REJECT START")
+                log_line("SUBMISSION_ID", submission_id)
+
+                result = await run_sheet(
                     context,
                     reject_owner_submission,
                     submission_id
                 )
+
+                log_line("REJECT_RESULT", result)
 
         except Exception as e:
             log_block("OWNER REJECT ERROR")
@@ -1667,6 +1683,7 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
         except:
             pass
 
+        POSTPONED_OWNER_SUBMISSIONS[submission_id] = "REVIEWED"
         data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
 
         if data:
