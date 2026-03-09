@@ -362,23 +362,9 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "➕ ADD ACCOUNT",
             "👤 MY ACCOUNTS",
             "📍 NEARBY ACCOUNTS",
-            "🔎 SEARCH ACCOUNT"
-        ]:
-            await open_menu_for_role(update, context, role)
-            return        if text not in [
-            PANEL_ACCOUNTS,
-            PANEL_ITEMS,
-            PANEL_WORKFLOW,
-            PANEL_USERS,
-            PANEL_TASKS,
-            PANEL_REPORTS,
-            PANEL_SYSTEM,
-            PANEL_BACK,
-            "➕ ADD ACCOUNT",
-            "👤 MY ACCOUNTS",
-            "📍 NEARBY ACCOUNTS",
             "🔎 SEARCH ACCOUNT",
             BTN_PENDING_ACCOUNTS
+            PANEL_BACK
         ]:
             await open_menu_for_role(update, context, role)
             return
