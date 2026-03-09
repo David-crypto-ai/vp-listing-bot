@@ -1553,7 +1553,10 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
             log_block("OWNER APPROVE ERROR")
             log_line("ERROR", repr(e))
 
-        await query.delete_message()
+        try:
+            await query.delete_message()
+        except:
+            pass
 
         try:
             data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
@@ -1606,7 +1609,10 @@ async def owner_review_callback(update: Update, context: ContextTypes.DEFAULT_TY
             log_block("OWNER REJECT ERROR")
             log_line("ERROR", repr(e))
 
-        await query.delete_message()
+        try:
+            await query.delete_message()
+        except:
+            pass
 
         try:
             data = POSTPONED_OWNER_SUBMISSIONS.pop(submission_id, None)
@@ -1685,7 +1691,7 @@ async def error_handler(update, context):
             print("⚠ Another bot instance is polling Telegram")
             SECOND_BOT_WARNING_SHOWN = True
 
-        return
+        raise context.error
 
     log_block("GLOBAL ERROR")
     log_line("ERROR", repr(context.error))
