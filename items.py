@@ -84,6 +84,8 @@ def owner_select_keyboard(accounts):
 
 async def handle_items_panel(update, context, text, role, status):
 
+    item_debug("ENTER_HANDLE_ITEMS_PANEL", text)
+
     from menus import PANEL_ITEMS
 
     uid = str(update.effective_user.id)
@@ -132,8 +134,12 @@ async def handle_items_panel(update, context, text, role, status):
 
     item_debug("state", state)
     item_debug("text", text)
+    item_debug("user_data_keys", list(context.user_data.keys()))
 
     if state == ITEM_NONE:
+
+        item_debug("WIZARD_NOT_ACTIVE", text)
+
         return False
 
     draft = context.user_data.get("item_draft", {})
@@ -199,6 +205,8 @@ async def handle_items_panel(update, context, text, role, status):
     # VIN STEP
     # =================================================
     if state == ITEM_VIN:
+
+        item_debug("ENTER_VIN_STEP", text)
 
         if text == "🔙 BACK":
 

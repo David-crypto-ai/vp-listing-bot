@@ -53,8 +53,14 @@ async def debug_router(update, context):
         print("========== ROUTER DEBUG ==========")
         print("RAW_TEXT:", update.message.text)
         print("USER_ID:", update.effective_user.id)
+        print("MESSAGE_TYPE:", type(update.message))
+        print("CHAT_ID:", update.effective_chat.id)
 
-    return await route_message(update, context)
+    result = await route_message(update, context)
+
+    print("ROUTER RESULT:", result)
+
+    return result
 
 app.add_handler(MessageHandler(~filters.COMMAND, debug_router), group=2)
 
