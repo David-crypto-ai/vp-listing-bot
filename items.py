@@ -39,7 +39,7 @@ def wizard_back_keyboard():
     )
 
 
-def confirm_keyboard():
+def item_confirm_keyboard():
     return ReplyKeyboardMarkup(
         [
             [KeyboardButton("✅ SAVE ITEM")],
@@ -63,13 +63,12 @@ def duplicate_warning_keyboard():
 # ================= REVIEW MEMORY =================
 
 PENDING_ITEM_REVIEWS = {}
-CURRENT_ITEM_REVIEW = {}
 
 def owner_select_keyboard(accounts):
 
     rows = []
 
-    for acc in accounts[:25]:
+    for acc in accounts[:50]:
 
         label = f"{acc['owner_name']} ({acc['owner_id']})"
 
@@ -167,7 +166,7 @@ async def handle_items_panel(update, context, text, role, status):
 
         selected_owner = None
 
-        for acc in accounts[:25]:
+        for acc in accounts[:50]:
 
             label = f"{acc['owner_name']} ({acc['owner_id']})"
             item_debug("checking_owner_label", label)
@@ -234,7 +233,10 @@ async def handle_items_panel(update, context, text, role, status):
 
         idx = index_ws()
 
-        vin_col = idx.col_values(2)[1:]  # VIN_FULL column
+        try:
+            vin_col = idx.col_values(2)[1:] if idx.col_values(2) else []
+        except:
+            vin_col = []
 
         for existing_vin in vin_col:
 
@@ -318,7 +320,7 @@ async def handle_items_panel(update, context, text, role, status):
 
         if text == "DONE":
 
-            if not draft["photos"]:
+            if not draft.get("photos"):
                 await update.message.reply_text(
                     "Please upload at least one photo."
                 )
@@ -339,6 +341,8 @@ async def handle_items_panel(update, context, text, role, status):
 
             draft.setdefault("photos", [])
             draft["photos"].append(photo.file_id)
+
+            context.user_data["item_draft"] = draft
 
             await update.message.reply_text(
                 f"Photo saved ({len(draft['photos'])})"
@@ -467,7 +471,7 @@ Commission: {draft.get("commission_rate")}
 
 Save item?
 """,
-            reply_markup=confirm_keyboard()
+            reply_markup=item_confirm_keyboard()
         )
 
         return True

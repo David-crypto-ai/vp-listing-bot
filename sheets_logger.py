@@ -529,8 +529,8 @@ def get_worker_accounts(worker_id: str):
 
 def next_item_id():
     ws = items_ws()
-    count = len(ws.col_values(1))  # only read first column
-    return fmt_item_id(count)
+    count = len(ws.col_values(1)) - 1
+    return fmt_item_id(count + 1)
 
 def create_draft(worker_id: str, owner_id: str, owner_type: str, owner_name_cache: str):
     ws = items_ws()

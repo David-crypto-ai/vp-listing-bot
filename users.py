@@ -265,9 +265,6 @@ async def notify_admin_new_user(context, telegram_id, username, full_name):
 # ================================
 # OWNERS TABLE
 # ================================
-TAB_OWNERS = "OWNERS_MASTER"
-
-def owners_sheet():
     return _worksheet(TAB_OWNERS, [
         "OWNER_ID",
         "OWNER_TYPE",

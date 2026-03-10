@@ -9,15 +9,14 @@ from telegram.ext import (
 
 from telegram.error import Conflict
 
-from accounts import (
-    start_button,
-    route_message,
-    callback_router
-)
+from accounts import start_button
+from router import route_message, callback_router
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 
 # ================= ERROR HANDLER =================
+SECOND_BOT_WARNING_SHOWN = False
+
 async def error_handler(update, context):
 
     global SECOND_BOT_WARNING_SHOWN
@@ -68,7 +67,10 @@ app.add_handler(MessageHandler(~filters.COMMAND, debug_router), group=2)
 
 # ================= TELEGRAM POLLING =================
 
-app.bot.delete_webhook(drop_pending_updates=True)
+try:
+    app.bot.delete_webhook(drop_pending_updates=True)
+except:
+    pass
 
 while True:
 
@@ -80,6 +82,7 @@ while True:
             poll_interval=0.1,
             timeout=30,
             bootstrap_retries=5,
+            allowed_updates=None
         )
 
     except Conflict:
