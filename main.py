@@ -37,6 +37,8 @@ async def error_handler(update, context):
 app = ApplicationBuilder().token(TOKEN).build()
 
 print("Bot running...")
+print("Polling started")
+print("Waiting for updates...")
 
 # ================= HANDLERS =================
 
@@ -46,11 +48,24 @@ app.add_handler(CommandHandler("start", start_button), group=0)
 
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
 
-app.add_handler(MessageHandler(~filters.COMMAND, route_message), group=2)
+async def debug_router(update, context):
+    if update.message:
+        print("========== ROUTER DEBUG ==========")
+        print("RAW_TEXT:", update.message.text)
+        print("USER_ID:", update.effective_user.id)
+
+    return await route_message(update, context)
+
+app.add_handler(MessageHandler(~filters.COMMAND, debug_router), group=2)
 
 # ================= TELEGRAM POLLING =================
 
-app.bot.delete_webhook(drop_pending_updates=True)
+import asyncio
+
+async def clear_webhook():
+    await app.bot.delete_webhook(drop_pending_updates=True)
+
+asyncio.run(clear_webhook())
 
 try:
     app.run_polling(
