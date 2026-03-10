@@ -327,8 +327,8 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     last = USER_RATE_LIMIT.get(uid)
 
-    # allow BACK button to bypass rate limiter
-    if btn != "BACK":
+    # allow BACK and PHOTO uploads to bypass rate limiter
+    if btn != "BACK" and not has_photo:
         if last and now - last < RATE_LIMIT_SECONDS:
             return
 

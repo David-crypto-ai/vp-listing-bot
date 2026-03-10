@@ -4,6 +4,39 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timezone, timedelta
 import math
 
+_OWNER_COORD_CACHE = None
+
+def load_owner_coords():
+
+    global _OWNER_COORD_CACHE
+
+    if _OWNER_COORD_CACHE:
+        return _OWNER_COORD_CACHE
+
+    ws = owners_ws()
+    rows = ws.get_all_values()[1:]
+
+    cache = []
+
+    for r in rows:
+
+        if len(r) < 18:
+            continue
+
+        coords = r[17]
+
+        if not coords:
+            continue
+
+        try:
+            lat, lon = map(float, coords.split(","))
+            cache.append((lat, lon, r))
+        except:
+            pass
+
+    _OWNER_COORD_CACHE = cache
+    return cache
+
 from config import (
     SPREADSHEET_ID, GOOGLE_CREDENTIALS,
     WORKSHEET_ITEMS, WORKSHEET_OWNERS, WORKSHEET_LOG, WORKSHEET_TASKS,
@@ -14,31 +47,44 @@ from utils import now_str, fmt_item_id, safe_text, is_vin_17
 # ---------------- SCHEMAS ----------------
 
 ITEMS_SCHEMA = [
-    # system
-    "FECHA_CREACION_ITEM",
+    "CREATED_AT",
     "ITEM_ID",
-    "ESTADO_ITEM",            # DRAFT / PENDING_REVIEW / ACTIVE / SOLD / HIDDEN
+    "ITEM_STATUS",
+    "LISTING_STATUS_REASON",
+    "LAST_UPDATED_AT",
+
     "FINDER_WORKER_ID",
     "SELLER_WORKER_ID",
     "GATEKEEPER_ID",
-    "LAST_UPDATED_AT",
 
-    # raw intake
+    "OWNER_ID",
+    "OWNER_TYPE",
+    "OWNER_STOCK_NUMBER",
+
+    "VEHICLE_CATEGORY",
+    "TYPE",
+    "MAKE",
+    "MODEL",
+    "YEAR",
+    "MILES",
+    "ENGINE",
+    "TRANSMISSION",
+    "DIFFERENTIALS",
+    "SUSPENSION",
+    "PLATES",
+
+    "VIN_FULL",
+    "VIN_LAST6",
+
+    "STATE",
+    "CITY",
+    "PUBLIC_LOCATION",
+    "PUBLIC_DESCRIPTION",
+
     "RAW_CAPTION",
     "PARSE_CONFIDENCE",
     "PHOTO_COUNT",
 
-    # owner link
-    "OWNER_ID",
-    "OWNER_TYPE",             # Truck Owner / Online Owner / Auction Company
-    "OWNER_NAME_CACHE",
-
-    # public fields (minimal for now)
-    "VIN_COMPLETO",
-    "DESCRIPCION_PUBLICA",
-    "UBICACION_PUBLICA",
-
-    # pricing/admin
     "OWNER_PRICE",
     "LIST_PRICE",
     "COMMISSION_RATE",
@@ -46,20 +92,24 @@ ITEMS_SCHEMA = [
     "SELLER_COMMISSION_AMOUNT",
     "NET_TO_OWNER",
 
-    # lifecycle confirmations
+    "BUYER_LEADS_COUNT",
+
     "LAST_CONFIRMED_AVAILABLE_AT",
     "NEXT_CONFIRM_DUE_AT",
+    "STALE_WARNING_AT",
     "AUTO_HIDE_AT",
 
-    # sold
     "SOLD_AT",
     "SOLD_PRICE",
     "SOLD_NOTES",
 
-    # publishing placeholders (later)
     "SHOPIFY_PRODUCT_ID",
+    "SHOPIFY_HANDLE",
     "SHOPIFY_STATUS",
-    "PUBLIC_TELEGRAM_MESSAGE_ID",
+
+    "TELEGRAM_CHAT_ID",
+    "TELEGRAM_MESSAGE_ID",
+    "PUBLIC_TELEGRAM_POST_URL",
 ]
 
 OWNERS_SCHEMA = [
@@ -189,6 +239,30 @@ def log_ws():
 def tasks_ws():
     return _get_ws(WORKSHEET_TASKS, TASKS_SCHEMA, cols="25")
 
+
+def index_ws():
+    ss = _client().open_by_key(SPREADSHEET_ID)
+
+    try:
+        ws = ss.worksheet("TRUCK_INDEX")
+    except Exception:
+        ws = ss.add_worksheet(title="TRUCK_INDEX", rows="5000", cols="15")
+
+        ws.append_row([
+            "ITEM_ID",
+            "VIN_FULL",
+            "VIN_LAST6",
+            "OWNER_ID",
+            "OWNER_STOCK_NUMBER",
+            "MAKE",
+            "MODEL",
+            "YEAR",
+            "STATE",
+            "ROW_NUMBER"
+        ])
+
+    return ws
+
 # ---------------- LOGGING ----------------
 
 def log_action(user_id: str, role: str, action: str, item_id="", owner_id="", details="", result="OK"):
@@ -222,8 +296,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
 
 def check_nearby_accounts(lat, lon, radius=200):
-    ws = owners_ws()
-    rows = ws.get_all_values()[1:]
+    rows = load_owner_coords()
 
     matches = []
 
@@ -236,23 +309,9 @@ def check_nearby_accounts(lat, lon, radius=200):
     min_lon = lon - lon_buffer
     max_lon = lon + lon_buffer
 
-    for r in rows:
-
-        if len(r) < 18:
-            continue
-
-        coords = r[17]
+    for lat2, lon2, r in rows:
 
         print("[DISTANCE DEBUG] OWNER_ID:", r[0])
-        print("[DISTANCE DEBUG] COORDS_CELL:", coords)
-
-        if not coords:
-            continue
-
-        try:
-            lat2, lon2 = map(float, coords.split(","))
-        except:
-            continue
 
         # ----- skip far coordinates fast -----
         if lat2 < min_lat or lat2 > max_lat or lon2 < min_lon or lon2 > max_lon:
@@ -465,21 +524,12 @@ def get_worker_accounts(worker_id: str):
             })
 
     return results
-    ws = owners_ws()
-    rows = ws.get_all_values()[1:]
-    out = []
-    for r in reversed(rows):
-        if len(r) > 10 and r[10] == str(user_id):
-            out.append(r)
-        if len(out) >= limit:
-            break
-    return out
 
 # ---------------- ITEMS ----------------
 
 def next_item_id():
     ws = items_ws()
-    count = len(ws.get_all_values())  # includes header
+    count = len(ws.col_values(1))  # only read first column
     return fmt_item_id(count)
 
 def create_draft(worker_id: str, owner_id: str, owner_type: str, owner_name_cache: str):
@@ -492,36 +542,72 @@ def create_draft(worker_id: str, owner_id: str, owner_type: str, owner_name_cach
     auto_hide = (datetime.now(timezone.utc) + timedelta(days=DAYS_AUTO_HIDE)).strftime("%Y-%m-%d %H:%M:%S")
 
     ws.append_row([
-        now,
-        item_id,
-        "DRAFT",
-        str(worker_id),
-        "",        # seller
-        "",        # gatekeeper
-        now,
+        now,                   # CREATED_AT
+        item_id,               # ITEM_ID
+        "DRAFT",               # ITEM_STATUS
+        "",                    # LISTING_STATUS_REASON
+        now,                   # LAST_UPDATED_AT
 
-        "",        # raw_caption
-        "0",
-        "0",
+        str(worker_id),        # FINDER_WORKER_ID
+        "",                    # SELLER_WORKER_ID
+        "",                    # GATEKEEPER_ID
 
-        owner_id,
-        owner_type,
-        owner_name_cache,
+        owner_id,              # OWNER_ID
+        owner_type,            # OWNER_TYPE
+        "",                    # OWNER_STOCK_NUMBER
 
-        "",        # vin
-        "",        # public desc
-        "",        # public location
+        "", "", "", "", "", "", "", "", "", "", "", "",
+
+        "",                    # VIN_FULL
+        "",                    # VIN_LAST6
+
+        "",                    # STATE
+        "",                    # CITY
+        "",                    # PUBLIC_LOCATION
+        "",                    # PUBLIC_DESCRIPTION
+
+        "",                    # RAW_CAPTION
+        "0",                   # PARSE_CONFIDENCE
+        "0",                   # PHOTO_COUNT
 
         "", "", "", "", "", "",
 
-        "",        # last_confirmed
-        next_due,
-        auto_hide,
+        "0",                   # BUYER_LEADS_COUNT
+
+        "",                    # LAST_CONFIRMED_AVAILABLE_AT
+        next_due,              # NEXT_CONFIRM_DUE_AT
+        "",                    # STALE_WARNING_AT
+        auto_hide,             # AUTO_HIDE_AT
 
         "", "", "",
 
-        "", "", ""
+        "",                    # SHOPIFY_PRODUCT_ID
+        "",                    # SHOPIFY_HANDLE
+        "",                    # SHOPIFY_STATUS
+
+        "",                    # TELEGRAM_CHAT_ID
+        "",                    # TELEGRAM_MESSAGE_ID
+        "",                    # PUBLIC_TELEGRAM_POST_URL
     ])
+
+    # -------- ADD TO TRUCK_INDEX --------
+    idx = index_ws()
+
+    row_number = len(ws.col_values(1))
+
+    idx.append_row([
+        item_id,
+        "",     # VIN_FULL
+        "",     # VIN_LAST6
+        owner_id,
+        "",     # OWNER_STOCK_NUMBER
+        "",     # MAKE
+        "",     # MODEL
+        "",     # YEAR
+        "",     # STATE
+        row_number
+    ])
+
     return item_id
 
 def get_item_row(item_id: str):
@@ -538,13 +624,39 @@ def update_item_fields(item_id: str, updates: dict):
     if not row_i:
         return False
 
-    # update LAST_UPDATED_AT always
     updates["LAST_UPDATED_AT"] = now_str()
 
     col_index = {name: idx+1 for idx, name in enumerate(header)}
+
     for k, v in updates.items():
         if k in col_index:
             ws.update_cell(row_i, col_index[k], str(v))
+
+    # -------- UPDATE TRUCK_INDEX --------
+    idx = index_ws()
+    rows = idx.get_all_values()
+
+    for i, r in enumerate(rows[1:], start=2):
+
+        if r and r[0] == item_id:
+
+            index_updates = {
+                "VIN_FULL": 1,
+                "VIN_LAST6": 2,
+                "OWNER_ID": 3,
+                "OWNER_STOCK_NUMBER": 4,
+                "MAKE": 5,
+                "MODEL": 6,
+                "YEAR": 7,
+                "STATE": 8,
+            }
+
+            for field, col in index_updates.items():
+                if field in updates:
+                    idx.update_cell(i, col+1, str(updates[field]))
+
+            break
+
     return True
 
 def list_items_by_status(status: str, limit=10, worker_id=None):

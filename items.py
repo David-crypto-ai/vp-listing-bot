@@ -1,16 +1,17 @@
-from telegram import ReplyKeyboardMarkup, KeyboardButton
-ffrom sheets_logger import create_draft, update_item_fields, get_worker_accounts
-from utils import safe_text
+from telegram import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
+from sheets_logger import create_draft, update_item_fields, get_worker_accounts
+from utils import safe_text, now_str
 
 
 # ================= ITEM STATES =================
 
 ITEM_NONE = 0
 ITEM_OWNER = 1
-ITEM_PHOTOS = 2
-ITEM_CAPTION = 3
-ITEM_OWNER_PRICE = 4
-ITEM_CONFIRM = 5
+ITEM_VIN = 2
+ITEM_OWNER_PRICE = 3
+ITEM_PHOTOS = 4
+ITEM_CAPTION = 5
+ITEM_CONFIRM = 6
 
 
 # ================= KEYBOARDS =================
@@ -46,11 +47,26 @@ def confirm_keyboard():
     )
 
 
+def duplicate_warning_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("➡ CONTINUE")],
+            [KeyboardButton("❌ CANCEL")]
+        ],
+        resize_keyboard=True
+    )
+
+
+# ================= REVIEW MEMORY =================
+
+PENDING_ITEM_REVIEWS = {}
+CURRENT_ITEM_REVIEW = {}
+
 def owner_select_keyboard(accounts):
 
     rows = []
 
-    for acc in accounts:
+    for acc in accounts[:25]:
 
         label = f"{acc['owner_name']} ({acc['owner_id']})"
 
@@ -59,14 +75,6 @@ def owner_select_keyboard(accounts):
     rows.append([KeyboardButton("🔙 BACK")])
 
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
-    return ReplyKeyboardMarkup(
-        [
-            [KeyboardButton("✅ SAVE ITEM")],
-            [KeyboardButton("❌ CANCEL")],
-            [KeyboardButton("🔙 BACK")]
-        ],
-        resize_keyboard=True
-    )
 
 
 # ================= MAIN HANDLER =================
@@ -146,7 +154,7 @@ async def handle_items_panel(update, context, text, role, status):
 
         selected_owner = None
 
-        for acc in accounts:
+        for acc in accounts[:25]:
 
             label = f"{acc['owner_name']} ({acc['owner_id']})"
 
@@ -164,14 +172,110 @@ async def handle_items_panel(update, context, text, role, status):
 
         draft["owner_id"] = selected_owner["owner_id"]
 
-        context.user_data["item_state"] = ITEM_PHOTOS
+        context.user_data["item_state"] = ITEM_VIN
 
         await update.message.reply_text(
-            "Send truck photos.\n\nSend one photo at a time.\nType DONE when finished.",
+            "Enter full 17-digit VIN:",
             reply_markup=wizard_back_keyboard()
         )
 
         return True
+
+
+    # =================================================
+    # VIN STEP
+    # =================================================
+    if state == ITEM_VIN:
+
+        if text == "🔙 BACK":
+
+            context.user_data["item_state"] = ITEM_OWNER
+
+            await update.message.reply_text(
+                "Select owner again:",
+                reply_markup=owner_select_keyboard(context.user_data.get("owner_accounts", []))
+            )
+
+            return True
+
+        vin = safe_text(text).upper()
+
+        if len(vin) != 17:
+
+            await update.message.reply_text(
+                "VIN must be 17 characters."
+            )
+
+            return True
+
+        # duplicate check using TRUCK_INDEX
+        from sheets_logger import index_ws
+
+        idx = index_ws()
+
+        vin_col = idx.col_values(2)[1:]  # VIN_FULL column
+
+        for existing_vin in vin_col:
+
+            existing_vin = (existing_vin or "").strip().upper()
+
+            if existing_vin == vin:
+
+                context.user_data["duplicate_vin"] = vin
+
+                await update.message.reply_text(
+                    "⚠ Possible duplicate VIN detected.\nContinue anyway?",
+                    reply_markup=duplicate_warning_keyboard()
+                )
+
+                return True
+
+        draft["vin"] = vin
+        context.user_data.pop("duplicate_vin", None)
+
+        context.user_data["item_state"] = ITEM_PHOTOS
+
+        await update.message.reply_text(
+            "Upload truck photos.\nType DONE when finished.",
+            reply_markup=wizard_back_keyboard()
+        )
+
+        return True
+
+
+    # =================================================
+    # DUPLICATE WARNING STEP
+    # =================================================
+
+    if context.user_data.get("duplicate_vin"):
+
+        if text == "❌ CANCEL":
+
+            context.user_data.pop("duplicate_vin", None)
+            context.user_data["item_state"] = ITEM_VIN
+
+            await update.message.reply_text(
+                "Enter VIN again:",
+                reply_markup=wizard_back_keyboard()
+            )
+
+            return True
+
+
+        if text == "➡ CONTINUE":
+
+            vin = context.user_data.pop("duplicate_vin")
+
+            draft["vin"] = vin
+
+            context.user_data["item_state"] = ITEM_PHOTOS
+
+            await update.message.reply_text(
+                "Upload truck photos.\nType DONE when finished.",
+                reply_markup=wizard_back_keyboard()
+            )
+
+            return True
 
 
     # =================================================
@@ -181,10 +285,10 @@ async def handle_items_panel(update, context, text, role, status):
 
         if text == "🔙 BACK":
 
-            context.user_data["item_state"] = ITEM_OWNER
+            context.user_data["item_state"] = ITEM_VIN
 
             await update.message.reply_text(
-                "Select owner for this item:",
+                "Enter full 17-digit VIN:",
                 reply_markup=wizard_back_keyboard()
             )
 
@@ -211,6 +315,7 @@ async def handle_items_panel(update, context, text, role, status):
 
             photo = update.message.photo[-1]
 
+            draft.setdefault("photos", [])
             draft["photos"].append(photo.file_id)
 
             await update.message.reply_text(
@@ -218,6 +323,10 @@ async def handle_items_panel(update, context, text, role, status):
             )
 
             return True
+
+        await update.message.reply_text(
+            "Please send a photo or type DONE."
+        )
 
         return True
 
@@ -238,7 +347,40 @@ async def handle_items_panel(update, context, text, role, status):
 
             return True
 
-        draft["caption"] = safe_text(text)
+        caption = safe_text(text).strip()
+        draft["caption"] = caption
+
+        # =========================
+        # AUTO FIELD EXTRACTION
+        # =========================
+
+        import re
+
+        year_match = re.search(r"(19|20)\d{2}", caption)
+        if year_match:
+            draft["year"] = year_match.group(0)
+
+        make_match = re.search(r"(Peterbilt|Kenworth|Freightliner|Volvo|International|Mack)", caption, re.IGNORECASE)
+        if make_match:
+            draft["make"] = make_match.group(0)
+
+        model_match = re.search(r"\b(389|579|379|579X|T680|W900)\b", caption)
+        if model_match:
+            draft["model"] = model_match.group(0)
+
+        miles_match = re.search(r"(\d{3,6})\s?k?\s?miles", caption, re.IGNORECASE)
+        if miles_match:
+
+            miles = miles_match.group(1)
+
+            if "k" in caption.lower():
+                miles = int(miles) * 1000
+
+            draft["miles"] = miles
+
+        engine_match = re.search(r"(Detroit|Cummins|PACCAR)", caption, re.IGNORECASE)
+        if engine_match:
+            draft["engine"] = engine_match.group(0)
 
         context.user_data["item_state"] = ITEM_OWNER_PRICE
 
@@ -266,7 +408,26 @@ async def handle_items_panel(update, context, text, role, status):
 
             return True
 
-        draft["owner_price"] = safe_text(text)
+        try:
+            owner_price = float(safe_text(text).replace(",", ""))
+        except:
+            await update.message.reply_text(
+                "Enter a valid number (example: 450000)"
+            )
+            return True
+
+        if owner_price <= 400000:
+            commission_rate = 0.10
+        elif owner_price <= 500000:
+            commission_rate = 0.09
+        else:
+            commission_rate = 0.08
+
+        list_price = round(owner_price * (1 + commission_rate), 2)
+
+        draft["owner_price"] = owner_price
+        draft["list_price"] = list_price
+        draft["commission_rate"] = commission_rate
 
         context.user_data["item_state"] = ITEM_CONFIRM
 
@@ -277,6 +438,8 @@ Review Item
 Owner ID: {draft.get("owner_id")}
 Photos: {len(draft.get("photos", []))}
 Owner Price: {draft.get("owner_price")}
+List Price: {draft.get("list_price")}
+Commission: {draft.get("commission_rate")}
 
 Save item?
 """,
@@ -326,9 +489,21 @@ Save item?
             update_item_fields(
                 item_id,
                 {
+                    "VIN_FULL": draft.get("vin"),
+                    "VIN_LAST6": draft.get("vin")[-6:] if draft.get("vin") else "",
+
                     "RAW_CAPTION": draft.get("caption"),
                     "PHOTO_COUNT": len(draft.get("photos")),
-                    "OWNER_PRICE": draft.get("owner_price")
+
+                    "YEAR": draft.get("year"),
+                    "MAKE": draft.get("make"),
+                    "MODEL": draft.get("model"),
+                    "MILES": draft.get("miles"),
+                    "ENGINE": draft.get("engine"),
+
+                    "OWNER_PRICE": draft.get("owner_price"),
+                    "LIST_PRICE": draft.get("list_price"),
+                    "COMMISSION_RATE": draft.get("commission_rate")
                 }
             )
 
