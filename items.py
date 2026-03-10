@@ -382,7 +382,7 @@ async def handle_items_panel(update, context, text, role, status):
 
         engine_match = re.search(r"(Detroit|Cummins|PACCAR)", caption, re.IGNORECASE)
         if engine_match:
-        draft["engine"] = engine_match.group(0)
+            draft["engine"] = engine_match.group(0)
 
         context.user_data["item_draft"] = draft
         context.user_data["item_state"] = ITEM_OWNER_PRICE
