@@ -172,6 +172,7 @@ async def handle_items_panel(update, context, text, role, status):
 
         draft["owner_id"] = selected_owner["owner_id"]
 
+        context.user_data["item_draft"] = draft
         context.user_data["item_state"] = ITEM_VIN
 
         await update.message.reply_text(
@@ -231,6 +232,7 @@ async def handle_items_panel(update, context, text, role, status):
                 return True
 
         draft["vin"] = vin
+        context.user_data["item_draft"] = draft
         context.user_data.pop("duplicate_vin", None)
 
         context.user_data["item_state"] = ITEM_PHOTOS
@@ -380,8 +382,9 @@ async def handle_items_panel(update, context, text, role, status):
 
         engine_match = re.search(r"(Detroit|Cummins|PACCAR)", caption, re.IGNORECASE)
         if engine_match:
-            draft["engine"] = engine_match.group(0)
+        draft["engine"] = engine_match.group(0)
 
+        context.user_data["item_draft"] = draft
         context.user_data["item_state"] = ITEM_OWNER_PRICE
 
         await update.message.reply_text(
@@ -429,6 +432,7 @@ async def handle_items_panel(update, context, text, role, status):
         draft["list_price"] = list_price
         draft["commission_rate"] = commission_rate
 
+        context.user_data["item_draft"] = draft
         context.user_data["item_state"] = ITEM_CONFIRM
 
         await update.message.reply_text(
