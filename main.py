@@ -60,12 +60,7 @@ app.add_handler(MessageHandler(~filters.COMMAND, debug_router), group=2)
 
 # ================= TELEGRAM POLLING =================
 
-import asyncio
-
-async def clear_webhook():
-    await app.bot.delete_webhook(drop_pending_updates=True)
-
-asyncio.run(clear_webhook())
+app.bot.delete_webhook(drop_pending_updates=True)
 
 try:
     app.run_polling(
