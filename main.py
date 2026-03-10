@@ -49,12 +49,14 @@ app.add_handler(CommandHandler("start", start_button), group=0)
 app.add_handler(MessageHandler(filters.LOCATION, route_message), group=1)
 
 async def debug_router(update, context):
+
     if update.message:
+
         print("========== ROUTER DEBUG ==========")
         print("RAW_TEXT:", update.message.text)
         print("USER_ID:", update.effective_user.id)
-        print("MESSAGE_TYPE:", type(update.message))
         print("CHAT_ID:", update.effective_chat.id)
+        print("USER_DATA_KEYS:", list(context.user_data.keys()))
 
     result = await route_message(update, context)
 
@@ -68,12 +70,22 @@ app.add_handler(MessageHandler(~filters.COMMAND, debug_router), group=2)
 
 app.bot.delete_webhook(drop_pending_updates=True)
 
-try:
-    app.run_polling(
-        drop_pending_updates=True,
-        poll_interval=0.1,
-        timeout=30,
-        bootstrap_retries=5,
-    )
-except Conflict:
-    print("Another bot instance detected. Restarting...")
+while True:
+
+    try:
+        print("Starting polling...")
+
+        app.run_polling(
+            drop_pending_updates=True,
+            poll_interval=0.1,
+            timeout=30,
+            bootstrap_retries=5,
+        )
+
+    except Conflict:
+
+        print("⚠ Conflict detected — another bot instance was polling.")
+        print("Restarting polling in 3 seconds...")
+
+        import time
+        time.sleep(3)
