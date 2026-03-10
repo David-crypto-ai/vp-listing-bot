@@ -505,7 +505,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if ENABLE_SHEETS:
 
                         # ADMIN → write directly to OWNERS_MASTER
-                            if str(uid) in [str(a) for a in ADMIN_IDS]:
+                        if str(uid) in [str(a) for a in ADMIN_IDS]:
 
                             owner_id = await run_sheet(
                                 context,
@@ -573,7 +573,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         log_block("ADMIN NOTIFY ERROR")
                         log_line("ERROR", repr(e))
 
-                        if str(uid) in [str(a) for a in ADMIN_IDS]:
+                    if str(uid) in [str(a) for a in ADMIN_IDS]:
                         message = "✅ Account created successfully."
                     else:
                         message = "⏳ Account submitted. Waiting for admin approval."
