@@ -2,6 +2,9 @@ from telegram import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, 
 from sheets_logger import create_draft, update_item_fields, get_worker_accounts
 from utils import safe_text, now_str
 
+def item_debug(label, value=""):
+    print(f"[ITEM DEBUG] {label}: {value}")
+
 
 # ================= ITEM STATES =================
 
@@ -127,6 +130,9 @@ async def handle_items_panel(update, context, text, role, status):
 
     state = context.user_data.get("item_state", ITEM_NONE)
 
+    item_debug("state", state)
+    item_debug("text", text)
+
     if state == ITEM_NONE:
         return False
 
@@ -151,18 +157,23 @@ async def handle_items_panel(update, context, text, role, status):
             return True
 
         accounts = context.user_data.get("owner_accounts", [])
+        item_debug("owner_accounts_count", len(accounts))
 
         selected_owner = None
 
         for acc in accounts[:25]:
 
             label = f"{acc['owner_name']} ({acc['owner_id']})"
+            item_debug("checking_owner_label", label)
 
             if text == label:
                 selected_owner = acc
+                item_debug("owner_matched", label)
                 break
 
         if not selected_owner:
+
+            item_debug("owner_match_failed", text)
 
             await update.message.reply_text(
                 "Please select an owner from the list."
@@ -171,6 +182,7 @@ async def handle_items_panel(update, context, text, role, status):
             return True
 
         draft["owner_id"] = selected_owner["owner_id"]
+        item_debug("owner_selected", draft["owner_id"])
 
         context.user_data["item_draft"] = draft
         context.user_data["item_state"] = ITEM_VIN
